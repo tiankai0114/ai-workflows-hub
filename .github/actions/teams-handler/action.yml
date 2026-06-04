@@ -1,0 +1,106 @@
+name: 'Microsoft Teams Notification Handler'
+description: >
+  Send a notification to a Microsoft Teams channel via Incoming Webhook.
+  Supports severity-based color coding. Typically used as an output handler
+  after Claude analyzes an exception or log anomaly.
+
+inputs:
+  webhook_url:
+    description: 'Teams Incoming Webhook URL'
+    required: true
+  title:
+    description: 'Notification title / headline'
+    required: true
+  message:
+    description: 'Notification body message (supports Markdown in Teams Message Card format)'
+    required: true
+  severity:
+    description: >
+      Severity level: critical | high | medium | low | info.
+      Controls the color accent of the card:
+        critical → #B60205 (red)
+        high     → #E36209 (orange)
+        medium   → #FBCA04 (yellow)
+        low      → #0075CA (blue)
+        info     → #0E8A16 (green)
+    required: false
+    default: 'info'
+  source_url:
+    description: 'Optional URL to link from the notification (e.g. GitHub run URL, Jira issue URL)'
+    required: false
+    default: ''
+  source_label:
+    description: 'Label for the source URL button'
+    required: false
+    default: 'View details'
+  repo:
+    description: 'Repository name to show in the notification context'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Post Teams notification
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook_url }}
+        TITLE: ${{ inputs.title }}
+        MESSAGE: ${{ inputs.message }}
+        SEVERITY: ${{ inputs.severity }}
+        SOURCE_URL: ${{ inputs.source_url }}
+        SOURCE_LABEL: ${{ inputs.source_label }}
+        REPO: ${{ inputs.repo }}
+      run: |
+        # Map severity → color hex
+        case "${SEVERITY,,}" in
+          critical) COLOR="B60205" ;;
+          high)     COLOR="E36209" ;;
+          medium)   COLOR="FBCA04" ;;
+          low)      COLOR="0075CA" ;;
+          info|*)   COLOR="0E8A16" ;;
+        esac
+
+        SEVERITY_UPPER=$(echo "${SEVERITY}" | tr '[:lower:]' '[:upper:]')
+
+        # Build Teams Message Card payload
+        # Uses the legacy "MessageCard" format which is universally supported
+        PAYLOAD=$(jq -n \
+          --arg color "${COLOR}" \
+          --arg title "${TITLE}" \
+          --arg message "${MESSAGE}" \
+          --arg severity "${SEVERITY_UPPER}" \
+          --arg repo "${REPO}" \
+          --arg source_url "${SOURCE_URL}" \
+          --arg source_label "${SOURCE_LABEL}" \
+          '{
+            "@type": "MessageCard",
+            "@context": "https://schema.org/extensions",
+            "themeColor": $color,
+            "summary": $title,
+            "sections": [{
+              "activityTitle": (if $repo != "" then ("**[" + $repo + "]** " + $title) else $title end),
+              "activitySubtitle": ("Severity: **" + $severity + "**"),
+              "activityText": $message,
+              "markdown": true
+            }],
+            "potentialAction": (if $source_url != "" then [{
+              "@type": "OpenUri",
+              "name": $source_label,
+              "targets": [{ "os": "default", "uri": $source_url }]
+            }] else [] end)
+          }')
+
+        echo "Sending Teams notification (severity=${SEVERITY})..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          -X POST \
+          -H "Content-Type: application/json" \
+          "${WEBHOOK_URL}" \
+          -d "${PAYLOAD}")
+
+        if [ "${HTTP_CODE}" != "200" ]; then
+          echo "::error::Teams webhook returned HTTP ${HTTP_CODE}"
+          exit 1
+        fi
+
+        echo "✅ Teams notification sent successfully"

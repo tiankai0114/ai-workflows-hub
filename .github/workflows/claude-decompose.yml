@@ -1,0 +1,188 @@
+name: "PGE: Decompose"
+
+# Reusable workflow — split a large issue into scope-scoped sub-issues.
+# Consumer trigger example:
+#   on: { issues: { types: [labeled] } }
+#   jobs:
+#     decompose:
+#       if: github.event.label.name == 'pge/status:decompose'
+#       uses: YOUR_ORG/ai-library/.github/workflows/claude-decompose.yml@v1
+#       with:
+#         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
+
+on:
+  workflow_call:
+    inputs:
+      aws_role:
+        description: 'IAM Role ARN for Bedrock OIDC'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+      bot_id:
+        description: 'GitHub App bot user ID'
+        required: false
+        type: string
+        default: ''
+      bot_name:
+        description: 'GitHub App bot login name'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Bedrock model ID'
+        required: false
+        type: string
+        default: 'us.anthropic.claude-sonnet-4-6'
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+jobs:
+  claude-decompose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check if already decomposed
+        id: guard
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.issue.labels.map(l => l.name);
+            const alreadyDecomposed = labels.includes('pge/status:decomposed');
+            core.setOutput('skip', String(alreadyDecomposed));
+            if (alreadyDecomposed) console.log('Issue already decomposed — skipping.');
+
+      - name: Remove pge/status:decompose label
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                name: 'pge/status:decompose',
+              });
+            } catch (e) {
+              console.log('Could not remove label:', e.message);
+            }
+
+      - name: "Decompose: analyze and create sub-issues"
+        if: steps.guard.outputs.skip != 'true'
+        id: decompose
+        uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ github.token }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          max_turns: '50'
+          prompt: |
+            You are the **Decomposer** for this project.
+
+            A large issue has been tagged for decomposition. Your job is to split it into
+            smaller, scope-focused sub-issues that can each run through the standard PGE
+            flow (Planner → Generator → Evaluator) independently.
+
+            ## Step 1: Read the parent issue and all comments
+
+            ```bash
+            gh issue view ${{ env.ISSUE_NUMBER }} --comments --repo ${{ env.GH_REPO }}
+            ```
+
+            Also read CLAUDE.md to understand project structure and scope labels.
+
+            ## Step 2: Analyze the scope and dependencies
+
+            Identify the natural split points:
+            - Which scopes are affected? (read the scope labels from CLAUDE.md's label section)
+            - What is the development dependency order?
+            - Which groups of changes are truly independent vs. must be sequential?
+
+            Group changes into 2–5 sub-issues. Each sub-issue should:
+            - Cover exactly 1–2 scopes
+            - Be implementable in a single PGE flow (estimated < 45 files)
+            - Have clear "Depends on: Sub-issue N" or "Depends on: none" noted
+
+            ## Step 3: Create sub-issues
+
+            For each sub-issue, create it with `gh issue create`. Use this template:
+
+            ```bash
+            gh issue create \
+              --repo ${{ env.GH_REPO }} \
+              --title "<concise title>" \
+              --label "pge/type:change,pge/scope:<X>,pge/status:triage" \
+              --body "$(cat <<'BODY'
+            ## Parent Issue
+            Part of #${{ env.ISSUE_NUMBER }}.
+
+            ## Scope
+            [Which sub-project(s) this sub-issue covers]
+
+            ## Depends on
+            [None | Sub-issue #N (must be merged first)]
+
+            ## Context
+            [Copy the relevant excerpt from the parent issue]
+
+            ## Acceptance Criteria
+            - [ ] [Criterion 1]
+            BODY
+            )"
+            ```
+
+            ## Step 4: Update parent issue with task list
+
+            Post a comment on #${{ env.ISSUE_NUMBER }} listing all sub-issues with dependency order.
+
+            ## Step 5: Add `pge/status:decomposed` label
+
+            ```bash
+            gh issue edit ${{ env.ISSUE_NUMBER }} --add-label "pge/status:decomposed" --repo ${{ env.GH_REPO }}
+            ```
+
+            ## Rules
+            - Do NOT add `pge/status:ready` or `pge/status:implement` to any sub-issue
+            - Sub-issues must be self-contained with enough context for the Planner
+            - Keep sub-issues implementable in CI (< 45 estimated files each)
+            - Prefer 3–4 sub-issues over 6+
+
+      - name: Verify decomposed label was applied
+        if: always() && steps.guard.outputs.skip != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+            });
+            const decomposed = issue.labels.map(l => l.name).includes('pge/status:decomposed');
+            if (!decomposed) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                body: '⚠️ **Decomposer failed to complete.** Check the [workflow run](' +
+                  `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}` +
+                  '). Re-trigger by removing and re-adding `pge/status:decompose`.',
+              });
+              core.setFailed('Decomposer did not apply pge/status:decomposed label.');
+            } else {
+              console.log('✅ Decomposition verified.');
+            }

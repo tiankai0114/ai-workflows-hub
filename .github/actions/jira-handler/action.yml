@@ -1,0 +1,129 @@
+name: 'Jira Issue Handler'
+description: >
+  Create a Jira issue via REST API. Typically used as an output handler
+  after Claude analyzes an exception or log anomaly.
+
+inputs:
+  jira_base_url:
+    description: 'Jira base URL, e.g. https://your-org.atlassian.net'
+    required: true
+  jira_project_key:
+    description: 'Jira project key, e.g. OPS or DEVOPS'
+    required: true
+  jira_user_email:
+    description: 'Email of the Jira user for Basic Auth'
+    required: true
+  jira_api_token:
+    description: 'Jira API token (from https://id.atlassian.com/manage-profile/security/api-tokens)'
+    required: true
+  summary:
+    description: 'Issue summary / title'
+    required: true
+  description:
+    description: 'Issue description in Jira wiki or ADF text format'
+    required: false
+    default: ''
+  issue_type:
+    description: 'Jira issue type name, e.g. Bug, Task, Incident'
+    required: false
+    default: 'Bug'
+  severity:
+    description: >
+      Severity level: critical | high | medium | low.
+      Maps to Jira priority: critical→Highest, high→High, medium→Medium, low→Low.
+    required: false
+    default: 'medium'
+  labels:
+    description: 'Comma-separated Jira labels to apply'
+    required: false
+    default: 'ai-detected,cloudwatch'
+  assignee_account_id:
+    description: 'Jira accountId of assignee (optional)'
+    required: false
+    default: ''
+
+outputs:
+  issue_key:
+    description: 'Created Jira issue key, e.g. OPS-123'
+    value: ${{ steps.create-issue.outputs.issue_key }}
+  issue_url:
+    description: 'Full URL to the created Jira issue'
+    value: ${{ steps.create-issue.outputs.issue_url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create Jira issue
+      id: create-issue
+      shell: bash
+      env:
+        JIRA_BASE_URL: ${{ inputs.jira_base_url }}
+        JIRA_PROJECT_KEY: ${{ inputs.jira_project_key }}
+        JIRA_USER_EMAIL: ${{ inputs.jira_user_email }}
+        JIRA_API_TOKEN: ${{ inputs.jira_api_token }}
+        SUMMARY: ${{ inputs.summary }}
+        DESCRIPTION: ${{ inputs.description }}
+        ISSUE_TYPE: ${{ inputs.issue_type }}
+        SEVERITY: ${{ inputs.severity }}
+        LABELS_CSV: ${{ inputs.labels }}
+        ASSIGNEE_ID: ${{ inputs.assignee_account_id }}
+      run: |
+        # Map severity → Jira priority name
+        case "${SEVERITY,,}" in
+          critical) PRIORITY="Highest" ;;
+          high)     PRIORITY="High" ;;
+          medium)   PRIORITY="Medium" ;;
+          low)      PRIORITY="Low" ;;
+          *)        PRIORITY="Medium" ;;
+        esac
+
+        # Build labels JSON array from comma-separated input
+        LABELS_JSON=$(echo "${LABELS_CSV}" | tr ',' '\n' | jq -Rsc '[split("\n") | .[] | select(. != "")]')
+
+        # Build base payload
+        PAYLOAD=$(jq -n \
+          --arg project "${JIRA_PROJECT_KEY}" \
+          --arg summary "${SUMMARY}" \
+          --arg description "${DESCRIPTION}" \
+          --arg issue_type "${ISSUE_TYPE}" \
+          --arg priority "${PRIORITY}" \
+          --argjson labels "${LABELS_JSON}" \
+          '{
+            fields: {
+              project: { key: $project },
+              summary: $summary,
+              description: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: $description }] }] },
+              issuetype: { name: $issue_type },
+              priority: { name: $priority },
+              labels: $labels
+            }
+          }')
+
+        # Add assignee if provided
+        if [ -n "${ASSIGNEE_ID}" ]; then
+          PAYLOAD=$(echo "${PAYLOAD}" | jq --arg id "${ASSIGNEE_ID}" '.fields.assignee = { accountId: $id }')
+        fi
+
+        echo "Creating Jira issue in project ${JIRA_PROJECT_KEY}..."
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X POST \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/json" \
+          -u "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
+          "${JIRA_BASE_URL}/rest/api/3/issue" \
+          -d "${PAYLOAD}")
+
+        HTTP_CODE=$(echo "${RESPONSE}" | tail -1)
+        BODY=$(echo "${RESPONSE}" | head -n -1)
+
+        if [ "${HTTP_CODE}" != "201" ]; then
+          echo "::error::Jira API returned HTTP ${HTTP_CODE}: ${BODY}"
+          exit 1
+        fi
+
+        ISSUE_KEY=$(echo "${BODY}" | jq -r '.key')
+        ISSUE_URL="${JIRA_BASE_URL}/browse/${ISSUE_KEY}"
+
+        echo "issue_key=${ISSUE_KEY}" >> "${GITHUB_OUTPUT}"
+        echo "issue_url=${ISSUE_URL}" >> "${GITHUB_OUTPUT}"
+        echo "✅ Created Jira issue: ${ISSUE_KEY} — ${ISSUE_URL}"

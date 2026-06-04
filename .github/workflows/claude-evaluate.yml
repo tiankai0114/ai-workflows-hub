@@ -1,0 +1,464 @@
+name: "PGE: Evaluator"
+
+# Reusable workflow — evaluates Generator PRs, handles human rework triggers,
+# and advances milestones after merge.
+#
+# mode: "evaluate"         — run Claude Evaluator on a bot-authored PR
+# mode: "human-rework"     — human CHANGES_REQUESTED on bot PR → add pge/pr:needs-rework
+# mode: "milestone-advance"— a milestone PR was merged → trigger next milestone
+#
+# Consumer trigger example (pge-evaluate.yml in consumer repo):
+#   on:
+#     pull_request:      { types: [opened, synchronize, closed] }
+#     pull_request_review: { types: [submitted] }
+#     workflow_dispatch:
+#       inputs: { pr_number: { required: true, type: string } }
+#   jobs:
+#     human-rework:
+#       if: github.event_name == 'pull_request_review' && ...
+#       uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+#       with: { mode: "human-rework", pr_number: ... }
+#     evaluate:
+#       if: github.event_name == 'workflow_dispatch' || ...
+#       uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+#       with: { mode: "evaluate", pr_number: ... }
+#     milestone-advance:
+#       if: github.event.action == 'closed' && github.event.pull_request.merged == true && ...
+#       uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+#       with: { mode: "milestone-advance", pr_number: ... }
+
+on:
+  workflow_call:
+    inputs:
+      aws_role:
+        description: 'IAM Role ARN for Bedrock OIDC'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+      bot_id:
+        description: 'GitHub App bot user ID'
+        required: false
+        type: string
+        default: ''
+      bot_name:
+        description: 'GitHub App bot login name'
+        required: false
+        type: string
+        default: ''
+      mode:
+        description: '"evaluate" | "human-rework" | "milestone-advance"'
+        required: true
+        type: string
+      pr_number:
+        description: 'PR number to evaluate or advance'
+        required: true
+        type: string
+      model:
+        description: 'Bedrock model ID'
+        required: false
+        type: string
+        default: 'us.anthropic.claude-sonnet-4-6'
+    secrets:
+      github_app_id:
+        description: 'GitHub App ID'
+        required: true
+      github_app_private_key:
+        description: 'GitHub App private key PEM'
+        required: true
+      figma_token:
+        description: 'Figma PAT (optional, for evaluate mode)'
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: read
+  id-token: write
+
+jobs:
+  # ─── Human review CHANGES_REQUESTED → add pge/pr:needs-rework ───────────────
+  human-review-rework:
+    if: inputs.mode == 'human-rework'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.github_app_id }}
+          private-key: ${{ secrets.github_app_private_key }}
+
+      - name: Add needs-rework label
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              name: 'pge/pr:approved'
+            }).catch(() => {});
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['pge/pr:needs-rework']
+            });
+            console.log(`Human review requested changes on PR #${prNumber} — added pge/pr:needs-rework`);
+
+  # ─── Claude Evaluator ────────────────────────────────────────────────────────
+  claude-evaluate:
+    if: inputs.mode == 'evaluate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Remove stale evaluation labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+            for (const label of ['pge/pr:approved', 'pge/pr:needs-rework', 'pge/pr:rejected']) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: label
+              }).catch(() => {});
+            }
+
+      - name: Resolve PR info
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            core.setOutput('number', prNumber);
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('title', pr.title);
+            console.log(`Evaluating PR #${prNumber}: ${pr.title}`);
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.pr.outputs.head_ref }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Detect push mode (human vs bot)
+        id: push-mode
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sender = context.payload.sender?.login ?? '';
+            const isHumanPush =
+              context.eventName === 'pull_request' &&
+              context.payload.action === 'synchronize' &&
+              !sender.endsWith('[bot]') &&
+              sender !== 'github-actions[bot]';
+            core.setOutput('human_push', isHumanPush ? 'true' : 'false');
+
+      - name: Collect verification results from changed files
+        id: verify-results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              per_page: 300,
+            });
+            const paths = files.map(f => f.filename);
+            core.setOutput('changed_paths', paths.join('\n'));
+            core.setOutput('summary', 'Changed files: ' + paths.length + '. Run `CLAUDE.md` build commands to verify.');
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.github_app_id }}
+          private-key: ${{ secrets.github_app_private_key }}
+
+      - name: Detect Figma references
+        id: detect-figma
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body --jq '.body' || echo "")
+          RESOLVED_ISSUE=$(echo "$PR_BODY" | grep -oE 'pge-source-issue:[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -n1 || echo "")
+          if {
+            if [ -n "$RESOLVED_ISSUE" ]; then
+              gh issue view "$RESOLVED_ISSUE" --comments --repo "$GH_REPO" \
+                   --json body,comments \
+                | jq -r '.body, (.comments[].body // "")' || true
+            fi
+            gh pr view "$PR_NUMBER" --repo "$GH_REPO" \
+                 --json body,comments,reviews \
+              | jq -r '.body, (.comments[].body // ""), (.reviews[].body // "")' || true
+            gh api "repos/$GH_REPO/pulls/$PR_NUMBER/comments" --jq '.[].body' || true
+          } | grep -iE 'figma\.com/(design|file|proto)/' > /dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
+          allowed_bots: ${{ inputs.bot_name }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          max_turns: '100'
+          prompt: |
+            You are the **Evaluator** for this project.
+            You are an INDEPENDENT reviewer — you did NOT generate this code.
+
+            ## Push Mode
+            human_push = ${{ steps.push-mode.outputs.human_push }}
+
+            **If human_push is "true":** You are in **OBSERVATION MODE**:
+            - Post findings as an informational comment only
+            - Do NOT add any labels
+            - Begin your comment with: "👤 **Human Push Detected — Observation Report**"
+
+            **If human_push is "false":** Run as normal Evaluator.
+
+            Your task:
+            1. Read PR #${{ inputs.pr_number }} description to find the linked issue and milestone number
+            2. Read the source issue to find the **latest** Planner's Sprint Contract for THIS milestone
+            3. Read CLAUDE.md and the relevant SKILL files. Always read these baselines:
+               - `.cursor/skills/clean-code/SKILL.md`
+               - `.cursor/skills/refactor/SKILL.md`
+               - The touched sub-project's `development-standard/SKILL.md`
+            4. Read the PR diff thoroughly
+            5. Grade the PR against these dimensions:
+
+            **A. Runtime Verification**
+            - Check if the PR description mentions passing build/lint/test for affected sub-projects.
+              In NORMAL MODE: any reported failure → 🔄 CHANGES REQUESTED.
+
+            **B. Requirement Coverage** (Pass/Fail per criterion)
+            - For each acceptance criterion in the Sprint Contract: ✅ met / ❌ not met / ⚠️ partially met
+
+            **C. Architecture Compliance**
+            - Layer boundaries respected?
+            - Naming conventions match SKILL standards?
+
+            **D. SKILL Consistency** (ENFORCEABLE)
+            - For each layer touched (engine, UI, server, shared packages, CI), check if corresponding
+              SKILL file was updated. Missing update → ❌.
+            - Check PR body `## Skills Updated` section — must list every SKILL file changed OR
+              explicitly justify why no update was needed per touched layer.
+
+            **E. Code Quality**
+            - Validation at external boundaries?
+            - Error handling (no swallowed errors, no raw stack traces to UI)?
+            - No secrets exposed?
+
+            **F. Design Fidelity** (only when Figma MCP is registered)
+            - If `mcp__figma__get_design_context` is available AND a Figma URL exists,
+              call the tool and compare against the PR diff.
+
+            **G. Clean Code & Standard Compliance**
+            - Walk the diff for violations of `.cursor/skills/clean-code/SKILL.md`:
+              - `any` casts, non-null assertions `!`, missing return types
+              - Functions > 50 LOC, > 4 params, nesting > 3
+              - Magic literals, `console.*` in production code, floating promises
+              - Drive-by reformatting mixed with feature changes
+
+            6. Post your evaluation as a PR comment with overall verdict (NORMAL MODE only):
+               ✅ APPROVE / 🔄 CHANGES REQUESTED / ❌ REJECT
+
+            **Verdict aggregation:**
+            - Any ❌ in A (Runtime) → 🔄 CHANGES REQUESTED
+            - Any ❌ in B (Requirements) → 🔄 CHANGES REQUESTED
+            - Dimension D FAIL → 🔄 CHANGES REQUESTED
+            - Dimension G FAIL (any ❌ item) → 🔄 CHANGES REQUESTED
+            - Otherwise: ✅ APPROVE
+
+            7. **After posting, apply labels (NORMAL MODE only):**
+               - ✅ APPROVE → add `pge/pr:approved`
+               - 🔄 CHANGES REQUESTED → add `pge/pr:needs-rework`
+               - ❌ REJECT → add `pge/pr:rejected`
+
+      - name: Submit formal GitHub review
+        if: steps.pr.outputs.head_ref != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+            const isHumanPush = '${{ steps.push-mode.outputs.human_push }}' === 'true';
+            if (isHumanPush) {
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner, repo: context.repo.repo,
+                pull_number: prNumber, event: 'COMMENT',
+                body: '👤 **Observation Mode** — Human push detected. See observation report above.',
+              });
+              return;
+            }
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber,
+            });
+            const approved = labels.some(l => l.name === 'pge/pr:approved');
+            const needsRework = labels.some(l => l.name === 'pge/pr:needs-rework');
+            const rejected = labels.some(l => l.name === 'pge/pr:rejected');
+            const event = approved ? 'APPROVE' : (needsRework || rejected) ? 'REQUEST_CHANGES' : 'COMMENT';
+            const body = approved ? '✅ Evaluator approved this PR.'
+                       : needsRework ? '🔄 Evaluator requested changes.'
+                       : rejected ? '❌ Evaluator rejected this PR.'
+                       : '📋 Evaluation complete.';
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber, event, body,
+            });
+
+      - name: Notify ready to merge + pipeline next milestone
+        if: steps.push-mode.outputs.human_push != 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber,
+            });
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber,
+            });
+            const approved = labels.some(l => l.name === 'pge/pr:approved');
+            if (!approved) return;
+
+            const match = pr.title.match(/\[Milestone (\d+)\/(\d+)\]/);
+            const milestoneInfo = match ? `Milestone ${match[1]}/${match[2]}` : 'this PR';
+            const isLastMilestone = match && parseInt(match[1]) >= parseInt(match[2]);
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number,
+              body: `✅ **Evaluator approved ${milestoneInfo}.** Ready for human review and merge.${
+                isLastMilestone ? '' : '\n\n🚀 **Next milestone has been triggered automatically** (pipelined).'
+              }`
+            });
+
+            if (match && !isLastMilestone) {
+              const currentMilestone = parseInt(match[1]);
+              const totalMilestones = parseInt(match[2]);
+              const markerMatch = pr.body && pr.body.match(/<!-- pge-source-issue: (\d+) -->/);
+              if (!markerMatch) return;
+              const issueNumber = parseInt(markerMatch[1]);
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: issueNumber,
+                body: `🔗 Milestone ${currentMilestone} approved — pipelining Milestone ${currentMilestone + 1} of ${totalMilestones}...`
+              });
+
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issueNumber, name: 'pge/status:implement'
+              }).catch(() => {});
+              await new Promise(r => setTimeout(r, 2000));
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issueNumber, labels: ['pge/status:implement']
+              });
+            }
+
+  # ─── Milestone advancement: PR merged → trigger next milestone ───────────────
+  milestone-advance:
+    if: inputs.mode == 'milestone-advance'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.github_app_id }}
+          private-key: ${{ secrets.github_app_private_key }}
+
+      - name: Advance to next milestone
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber,
+            });
+
+            const match = pr.title.match(/\[Milestone (\d+)\/(\d+)\]/);
+            if (!match) { console.log('No milestone pattern in PR title.'); return; }
+            const current = parseInt(match[1]);
+            const total = parseInt(match[2]);
+
+            // Find linked issue
+            let issueNumber = null;
+            const markerMatch = pr.body && pr.body.match(/<!-- pge-source-issue: (\d+) -->/);
+            if (markerMatch) {
+              issueNumber = parseInt(markerMatch[1]);
+            } else {
+              const { data: issues } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner, repo: context.repo.repo,
+                labels: 'pge/status:implement', state: 'open', per_page: 5,
+              });
+              if (issues.length === 1) issueNumber = issues[0].number;
+            }
+            if (!issueNumber) { console.log('No linked issue found.'); return; }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: issueNumber,
+              body: `✅ Milestone ${current} completed — PR #${pr.number} merged.\n\n${
+                current < total
+                  ? `🚀 Triggering Milestone ${current + 1} of ${total}...`
+                  : `🎉 All ${total} milestones completed. Closing issue.`
+              }`
+            });
+
+            if (current < total) {
+              const { data: issueComments } = await github.rest.issues.listComments({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: issueNumber,
+              });
+              const alreadyPipelined = issueComments.some(c =>
+                c.body && c.body.includes(`Milestone ${current} approved — pipelining Milestone ${current + 1}`)
+              );
+              if (!alreadyPipelined) {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issueNumber, name: 'pge/status:implement'
+                }).catch(() => {});
+                await new Promise(r => setTimeout(r, 2000));
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issueNumber, labels: ['pge/status:implement']
+                });
+              }
+            } else {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issueNumber, state: 'closed', state_reason: 'completed'
+              });
+            }

@@ -1,0 +1,450 @@
+name: "PGE: Planner"
+
+# Reusable workflow — called by the consumer repo's trigger file.
+# Consumer trigger example:
+#   on: { issues: { types: [labeled] } }
+#   jobs:
+#     plan:
+#       if: github.event.label.name == 'pge/status:ready'
+#       uses: YOUR_ORG/ai-library/.github/workflows/claude-plan.yml@v1
+#       with:
+#         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
+#         bot_name: "your-app[bot]"
+#         bot_id: "YOUR_BOT_ID"
+#       secrets:
+#         figma_token: ${{ secrets.FIGMA_TOKEN }}
+
+on:
+  workflow_call:
+    inputs:
+      aws_role:
+        description: 'IAM Role ARN for Bedrock OIDC'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+      bot_id:
+        description: 'GitHub App bot user ID for commit attribution'
+        required: false
+        type: string
+        default: ''
+      bot_name:
+        description: 'GitHub App bot login name'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Bedrock model ID (defaults to claude-sonnet-4-6)'
+        required: false
+        type: string
+        default: 'us.anthropic.claude-sonnet-4-6'
+    secrets:
+      figma_token:
+        description: 'Figma Personal Access Token (optional, enables design context)'
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+jobs:
+  claude-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Fetch planning history
+        id: history
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { writeFileSync } = await import('fs');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+            });
+
+            const lastPlanIndex = comments.findLastIndex(c =>
+              c.body && c.body.includes('<!-- MILESTONES_START -->')
+            );
+
+            const feedbackComments = lastPlanIndex >= 0
+              ? comments.slice(lastPlanIndex + 1)
+              : [];
+
+            const hasHistory = lastPlanIndex >= 0;
+            const hasFeedback = feedbackComments.length > 0;
+
+            if (hasHistory) {
+              let historyText = `---LAST PLAN (${comments[lastPlanIndex].created_at})---\n${comments[lastPlanIndex].body}`;
+              if (hasFeedback) {
+                historyText += '\n\n' + feedbackComments
+                  .map(c => `---FEEDBACK (${c.created_at} by ${c.user.login})---\n${c.body}`)
+                  .join('\n\n');
+              }
+              writeFileSync('/tmp/planner-history.md', historyText);
+            }
+
+            core.setOutput('has_history', String(hasHistory));
+            core.setOutput('has_feedback', String(hasFeedback));
+            core.setOutput('feedback_count', String(feedbackComments.length));
+            core.setOutput('comment_count_before', String(comments.length));
+            console.log(`Last plan found: ${hasHistory}, Feedback: ${feedbackComments.length}, Total: ${comments.length}`);
+
+      - name: Detect Figma references
+        id: detect-figma
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh issue view "$ISSUE_NUMBER" --comments --repo "$GH_REPO" \
+               --json body,comments \
+             | jq -r '.body, (.comments[].body // "")' \
+             | grep -iE 'figma\.com/(design|file|proto)/' > /dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ══════════════════════════════════════════════════════════════
+      # Iteration 1 — Initial analysis: identify open questions
+      # ══════════════════════════════════════════════════════════════
+      - name: "Iteration 1: Analyze & identify questions"
+        id: iter1-analyze
+        uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ github.token }}
+          figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          max_turns: '100'
+          prompt: |
+            You are the **Planner** for this project.
+
+            ## Reading the issue
+
+            Run the following command to read the full issue body AND all existing comments:
+
+            ```bash
+            gh issue view ${{ env.ISSUE_NUMBER }} --comments --repo ${{ env.GH_REPO }}
+            ```
+
+            ${{ steps.history.outputs.has_history == 'true' && 'This issue has been planned before (re-trigger). Read /tmp/planner-history.md — it contains the previous plan and any human feedback posted after it. You MUST produce a NEW plan that incorporates the feedback. Do NOT reuse the old plan as-is.' || '' }}
+
+            Your task for THIS step:
+            1. Read CLAUDE.md to understand the project structure and available SKILL files
+            2. **Always read the cross-repo baseline skills** before anything else:
+               - `.cursor/skills/clean-code/SKILL.md`
+               - `.cursor/skills/refactor/SKILL.md`
+            3. Based on the issue content AND all comments, identify affected domains and read those SKILL files
+            4. Perform impact analysis: which sub-projects, directories, and components are affected
+            5. Identify any **open questions** — raise a question for ANY ambiguity, design decision,
+               or feature mentioned in the issue that is NOT explicitly required by the acceptance criteria.
+
+            ## Figma references
+
+            If the tool `mcp__figma__get_design_context` is available AND the issue contains a URL of the form
+              https://www.figma.com/design/<fileKey>/...?node-id=<a>-<b>
+            extract `<fileKey>` and convert `<a>-<b>` to `<a>:<b>`, then call `mcp__figma__get_design_context`
+            and `mcp__figma__get_screenshot` BEFORE writing your analysis.
+            If the tools are not available, ignore this section.
+
+            ## CRITICAL: HOW TO POST YOUR OUTPUT
+
+            Your response text is NOT automatically posted. You MUST use `gh issue comment`:
+
+            ```bash
+            cat > /tmp/planner-output.md << 'PLAN_EOF'
+            <your formatted output here>
+            PLAN_EOF
+            gh issue comment ${{ env.ISSUE_NUMBER }} --body-file /tmp/planner-output.md
+            ```
+
+            ## CRITICAL OUTPUT FORMAT RULES
+
+            You MUST output FORMAT A. FORMAT B is not allowed in Iteration 1.
+
+            **FORMAT A — Required for ALL cases:**
+
+            ## ❓ Open Questions (Iteration 1)
+
+            The following questions need to be resolved before finalizing the plan:
+
+            1. **[Short title]** — [Detailed question with context]
+
+            **If you have NO open questions**, still post FORMAT A with the `<!-- NO_OPEN_QUESTIONS -->` marker:
+
+            ## ❓ Open Questions (Iteration 1)
+
+            <!-- NO_OPEN_QUESTIONS -->
+            No open questions identified. Proceeding to plan.
+
+            - **Scope confirmation** — [Brief confirmation]
+            - **Explicitly excluded** — [List every feature mentioned but NOT in the AC. Write "None" if empty.]
+
+            ## Rules
+            - You MUST post via `gh issue comment`
+            - Your post MUST start with `## ❓ Open Questions`
+            - FORMAT B (the final plan) is NOT allowed in Iteration 1
+            - Stay high-level. Define WHAT, not HOW.
+            - Do NOT create PRs or write code.
+            - Add appropriate `pge/scope:` and `pge/domain:` labels to the issue.
+
+      - name: "Iteration 1: Check result"
+        id: iter1-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+            });
+            const countBefore = parseInt('${{ steps.history.outputs.comment_count_before }}') || 0;
+            const newComments = comments.slice(countBefore);
+            const latest = newComments[newComments.length - 1];
+            const body = (latest && latest.body) || '';
+            const hasPlan = body.includes('<!-- MILESTONES_START -->');
+            const hasQuestions = body.includes('## ❓ Open Questions') && !body.includes('<!-- NO_OPEN_QUESTIONS -->');
+            core.setOutput('has_plan', String(hasPlan));
+            core.setOutput('needs_answers', String(hasQuestions && !hasPlan));
+
+      - name: "Iteration 1: Answer open questions"
+        if: steps.iter1-check.outputs.needs_answers == 'true'
+        uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ github.token }}
+          figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          max_turns: '50'
+          prompt: |
+            You are the **Planner's Advisor** for this project.
+
+            Read the issue #${{ env.ISSUE_NUMBER }} and ALL its comments
+            (`gh issue view ${{ env.ISSUE_NUMBER }} --comments --repo ${{ env.GH_REPO }}`).
+            The latest comment contains open questions from the Planner.
+
+            Read CLAUDE.md, `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
+            and the relevant sub-project SKILL files to ground your answers.
+
+            For each question, provide a recommended answer. Default to EXCLUDE for scope-inclusion questions.
+
+            **CRITICAL:** Post your output using `gh issue comment`:
+            ```bash
+            cat > /tmp/advisor-output.md << 'ADVISOR_EOF'
+            ## 💡 Recommended Answers (Iteration 1)
+
+            1. **[Short title]** — **Recommendation:** [Your recommended approach]
+               - *Rationale:* [Why this is the best choice]
+            ADVISOR_EOF
+            gh issue comment ${{ env.ISSUE_NUMBER }} --body-file /tmp/advisor-output.md
+            ```
+
+            Principles: prefer simplicity, follow existing patterns, be opinionated, default to EXCLUDE.
+
+      # ══════════════════════════════════════════════════════════════
+      # Iteration 2 — Re-analyze with answers
+      # ══════════════════════════════════════════════════════════════
+      - name: "Iteration 2: Re-analyze with answers"
+        if: steps.iter1-check.outputs.needs_answers == 'true'
+        id: iter2-analyze
+        uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ github.token }}
+          figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          max_turns: '50'
+          prompt: |
+            You are the **Planner** for this project (iteration 2).
+
+            Read issue #${{ env.ISSUE_NUMBER }} and ALL its comments
+            (`gh issue view ${{ env.ISSUE_NUMBER }} --comments --repo ${{ env.GH_REPO }}`).
+
+            Read CLAUDE.md, `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
+            and the relevant sub-project SKILL files.
+
+            Review the recommended answers from iteration 1. If NEW questions exist, post
+            `## ❓ Open Questions (Iteration 2)`. If all resolved, post the final `## 📋 Planner Analysis`.
+
+            **DO NOT** use the `<!-- NO_OPEN_QUESTIONS -->` marker in this iteration.
+            By Iteration 2 you MUST emit either the final plan (FORMAT B) or new questions.
+
+            **CRITICAL:** Post via `gh issue comment`. See the Planner Analysis template below.
+
+            Planner Analysis template:
+            ```
+            ## 📋 Planner Analysis
+
+            ### Impact Analysis
+            | Sub-project | Directories / Components affected |
+            |-------------|----------------------------------|
+            | ... | ... |
+
+            ### Skills Referenced
+            - `.cursor/skills/clean-code/SKILL.md` — cross-repo quality baseline (MANDATORY)
+            - `.cursor/skills/refactor/SKILL.md` — cross-repo refactor protocol (MANDATORY)
+            - `<sub-project>/.cursor/skills/development-standard/SKILL.md` — for each affected sub-project
+
+            ### Technical Considerations
+            - Architecture constraints, dependencies, risks
+
+            ### Resolved Questions
+            - [Summary of each question and the chosen answer]
+
+            <!-- MILESTONES_START -->
+            ### Milestones
+            #### Milestone 1 — `{scope}`: {title}
+            **Sub-project:** {sub-project}
+            **Depends on:** none | Milestone N
+
+            <!-- SPRINT_CONTRACT_START -->
+            #### Sprint Contract — Milestone 1
+            - [ ] Acceptance criterion 1
+            <!-- SPRINT_CONTRACT_END -->
+            <!-- MILESTONES_END -->
+            ```
+
+      - name: "Iteration 2: Check result"
+        if: steps.iter1-check.outputs.needs_answers == 'true'
+        id: iter2-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+            });
+            const countBefore = parseInt('${{ steps.history.outputs.comment_count_before }}') || 0;
+            const newComments = comments.slice(countBefore);
+            const latest = newComments[newComments.length - 1];
+            const body = (latest && latest.body) || '';
+            const hasPlan = body.includes('<!-- MILESTONES_START -->');
+            const hasQuestions = body.includes('## ❓ Open Questions') && !body.includes('<!-- NO_OPEN_QUESTIONS -->');
+            core.setOutput('has_plan', String(hasPlan));
+            core.setOutput('needs_answers', String(hasQuestions && !hasPlan));
+
+      - name: "Iteration 2: Answer open questions"
+        if: steps.iter2-check.outputs.needs_answers == 'true'
+        uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ github.token }}
+          figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          max_turns: '50'
+          prompt: |
+            You are the **Planner's Advisor** for this project.
+
+            Read issue #${{ env.ISSUE_NUMBER }} and ALL its comments
+            (`gh issue view ${{ env.ISSUE_NUMBER }} --comments --repo ${{ env.GH_REPO }}`).
+            The latest comment contains open questions (iteration 2).
+
+            Read CLAUDE.md, `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
+            and relevant SKILL files. For each question, provide a recommended answer.
+            Default to EXCLUDE for scope-inclusion questions.
+
+            Post output via `gh issue comment` with header `## 💡 Recommended Answers (Iteration 2)`.
+
+      # ══════════════════════════════════════════════════════════════
+      # Iteration 3 — Final (must produce plan)
+      # ══════════════════════════════════════════════════════════════
+      - name: "Iteration 3: Final analysis (must produce plan)"
+        if: |
+          steps.iter1-check.outputs.has_plan != 'true' &&
+          steps.iter2-check.outputs.has_plan != 'true'
+        uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ github.token }}
+          figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          max_turns: '100'
+          prompt: |
+            You are the **Planner** for this project (FINAL iteration).
+
+            Read issue #${{ env.ISSUE_NUMBER }} and ALL its comments
+            (`gh issue view ${{ env.ISSUE_NUMBER }} --comments --repo ${{ env.GH_REPO }}`).
+            You MUST post the final plan now.
+
+            Read CLAUDE.md, `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
+            and the relevant sub-project SKILL files.
+
+            The final `### Skills Referenced` MUST include the two baselines AND every touched
+            sub-project's `development-standard/SKILL.md`.
+
+            **CRITICAL:** Post via `gh issue comment` using the exact HTML comment markers:
+            ```bash
+            cat > /tmp/planner-output.md << 'PLAN_EOF'
+            ## 📋 Planner Analysis
+            ...
+            <!-- MILESTONES_START -->
+            ### Milestones
+            #### Milestone 1 — `{scope}`: {title}
+            <!-- SPRINT_CONTRACT_START -->
+            #### Sprint Contract — Milestone 1
+            - [ ] Acceptance criterion 1
+            <!-- SPRINT_CONTRACT_END -->
+            <!-- MILESTONES_END -->
+            PLAN_EOF
+            gh issue comment ${{ env.ISSUE_NUMBER }} --body-file /tmp/planner-output.md
+            ```
+
+            Stay high-level. Define WHAT, not HOW. Use `- [ ]` for acceptance criteria.
+
+      # ══════════════════════════════════════════════════════════════
+      # Post-plan: verify
+      # ══════════════════════════════════════════════════════════════
+      - name: Verify plan was posted
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+            });
+            const countBefore = parseInt('${{ steps.history.outputs.comment_count_before }}') || 0;
+            const newComments = comments.slice(countBefore);
+            const newPlanComment = newComments.findLast(c =>
+              c.body && c.body.includes('<!-- MILESTONES_START -->')
+            );
+            if (!newPlanComment) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                body: '⚠️ **Planner failed to produce a final plan.** Please check the [workflow run](' +
+                  `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}` +
+                  ') for details and re-trigger by removing and re-adding the `pge/status:ready` label.'
+              });
+              core.setFailed('No new Planner Analysis comment was posted during this run.');
+            } else {
+              console.log('✅ New plan verified:', newPlanComment.html_url);
+            }

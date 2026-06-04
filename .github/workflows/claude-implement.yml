@@ -1,0 +1,488 @@
+name: "PGE: Generator"
+
+# Reusable workflow — implements code (Generator) or fixes feedback (Rework).
+#
+# mode: "implement" — triggered by pge/status:implement label on an issue
+# mode: "rework"    — triggered by pge/pr:needs-rework label on a PR
+#
+# Consumer trigger example (single file handles both modes):
+#   on:
+#     issues:     { types: [labeled] }
+#     pull_request: { types: [labeled] }
+#   jobs:
+#     run:
+#       if: |
+#         (github.event_name == 'issues' && github.event.label.name == 'pge/status:implement') ||
+#         (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
+#       uses: YOUR_ORG/ai-library/.github/workflows/claude-implement.yml@v1
+#       with:
+#         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
+#         bot_name: "your-app[bot]"
+#         bot_id: "YOUR_BOT_ID"
+#         mode: ${{ github.event.label.name == 'pge/pr:needs-rework' && 'rework' || 'implement' }}
+#         pr_number: ${{ github.event.pull_request.number || '' }}
+#         evaluator_workflow_name: "Claude: Evaluator"
+#       secrets:
+#         github_app_id: ${{ secrets.GH_APP_ID }}
+#         github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+#         figma_token: ${{ secrets.FIGMA_TOKEN }}
+
+on:
+  workflow_call:
+    inputs:
+      aws_role:
+        description: 'IAM Role ARN for Bedrock OIDC'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+      bot_id:
+        description: 'GitHub App bot user ID for commit attribution'
+        required: true
+        type: string
+      bot_name:
+        description: 'GitHub App bot login name'
+        required: true
+        type: string
+      mode:
+        description: '"implement" to generate code, "rework" to fix Evaluator feedback'
+        required: false
+        type: string
+        default: 'implement'
+      pr_number:
+        description: 'PR number (required when mode=rework)'
+        required: false
+        type: string
+        default: ''
+      evaluator_workflow_name:
+        description: 'Name of the Evaluator workflow to re-trigger after rework (must match name: in consumer evaluator file)'
+        required: false
+        type: string
+        default: 'Claude: Evaluator'
+      model:
+        description: 'Bedrock model ID'
+        required: false
+        type: string
+        default: 'us.anthropic.claude-sonnet-4-6'
+    secrets:
+      github_app_id:
+        description: 'GitHub App ID for creating tokens'
+        required: true
+      github_app_private_key:
+        description: 'GitHub App private key PEM'
+        required: true
+      figma_token:
+        description: 'Figma PAT (optional)'
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  # ─── Generator: Implement when mode=implement ───────────────────────────────
+  claude-implement:
+    if: inputs.mode == 'implement'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Determine current milestone
+        id: milestone
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+            });
+
+            const plannerComment = comments.findLast(c =>
+              c.body && c.body.includes('<!-- MILESTONES_START -->')
+            );
+            if (!plannerComment) {
+              core.setOutput('number', '1');
+              core.setOutput('total', '1');
+              core.setOutput('has_milestones', 'false');
+              return;
+            }
+
+            const body = plannerComment.body;
+            const milestoneRegex = /#### Milestone (\d+)/g;
+            const milestones = [...body.matchAll(milestoneRegex)];
+            const total = milestones.length || 1;
+
+            const issueNumber = context.payload.issue.number;
+            const { data: allPulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100,
+            });
+            const issueMarker = `<!-- pge-source-issue: ${issueNumber} -->`;
+            const milestonePRs = allPulls.filter(pr =>
+              /\[Milestone \d+\/\d+\]/.test(pr.title) &&
+              pr.body && pr.body.includes(issueMarker)
+            );
+            const doneMilestones = milestonePRs.filter(pr => {
+              if (pr.merged_at) return true;
+              if (pr.labels && pr.labels.some(l => l.name === 'pge/pr:approved')) return true;
+              return false;
+            });
+
+            const completedMilestones = doneMilestones.length;
+            const current = completedMilestones + 1;
+            core.setOutput('number', String(current));
+            core.setOutput('total', String(total));
+            core.setOutput('has_milestones', 'true');
+
+            const prevMilestone = current - 1;
+            const prevPR = milestonePRs.find(pr =>
+              pr.title.includes(`[Milestone ${prevMilestone}/`) && !pr.merged_at && pr.state === 'open'
+            );
+            core.setOutput('prev_branch', prevPR ? prevPR.head.ref : '');
+            console.log(`Milestone ${current} of ${total}${prevPR ? ` (pipelining from ${prevPR.head.ref})` : ''}`);
+
+            if (current > total) {
+              core.setFailed(`All ${total} milestones already completed.`);
+            }
+
+      - name: Create milestone branch
+        run: |
+          BRANCH="milestone-${{ steps.milestone.outputs.number }}-of-${{ steps.milestone.outputs.total }}-issue-${{ github.event.issue.number }}"
+          PREV="${{ steps.milestone.outputs.prev_branch }}"
+          if [ -n "$PREV" ]; then
+            git fetch origin "$PREV"
+            git checkout -b "$BRANCH" "origin/$PREV"
+          else
+            git checkout -b "$BRANCH"
+          fi
+          echo "Created branch: $BRANCH"
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.github_app_id }}
+          private-key: ${{ secrets.github_app_private_key }}
+
+      - name: Detect Figma references
+        id: detect-figma
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if gh issue view "$ISSUE_NUMBER" --comments --repo "$GH_REPO" \
+               --json body,comments \
+             | jq -r '.body, (.comments[].body // "")' \
+             | grep -iE 'figma\.com/(design|file|proto)/' > /dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
+          allowed_bots: ${{ inputs.bot_name }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          show_full_output: 'true'
+          max_turns: '200'
+          prompt: |
+            You are the **Generator** for this project.
+
+            Read the issue that triggered this workflow. It contains a PRD and a Planner analysis
+            with milestones and Sprint Contracts (acceptance criteria per milestone).
+
+            ## Current milestone: ${{ steps.milestone.outputs.number }} of ${{ steps.milestone.outputs.total }}
+            ${{ steps.milestone.outputs.prev_branch != '' && format('## Pipeline mode: branching from `{0}` (previous milestone)', steps.milestone.outputs.prev_branch) || '' }}
+
+            Your task:
+            1. Read CLAUDE.md and all relevant SKILL files listed in the Planner analysis
+            2. **Always read these baseline skills before writing any code:**
+               - `.cursor/skills/clean-code/SKILL.md` (cross-repo quality baseline)
+               - `.cursor/skills/refactor/SKILL.md` (refactor protocol)
+               - The touched sub-project's `development-standard/SKILL.md`
+            3. Find the **latest** Planner comment (contains `<!-- MILESTONES_START -->`)
+            4. Locate **Milestone ${{ steps.milestone.outputs.number }}** and its Sprint Contract
+               (between `<!-- SPRINT_CONTRACT_START -->` and `<!-- SPRINT_CONTRACT_END -->`)
+            5. Implement ONLY the changes for this milestone
+            6. Follow coding standards from baseline skills AND the touched sub-project's
+               `development-standard/SKILL.md`
+            7. Follow architecture rules from CLAUDE.md
+            8. Run verification on affected sub-projects — check CLAUDE.md for the build and
+               test commands specific to this project
+            9. Update SKILL files to reflect your changes
+            10. Create a PR with:
+                - Title: `[Milestone ${{ steps.milestone.outputs.number }}/${{ steps.milestone.outputs.total }}] {feature title} (#${{ github.event.issue.number }})`
+                - Body with: summary, this milestone's Sprint Contract checklist, skills updated
+                - Link to the source issue (do NOT use "Closes #N" — the issue stays open)
+                - MUST include this exact HTML comment in the PR body:
+                  `<!-- pge-source-issue: ${{ github.event.issue.number }} -->`
+
+            ## Figma references
+
+            If `mcp__figma__get_design_context` is available AND the source issue contains a URL of the form
+              https://www.figma.com/design/<fileKey>/...?node-id=<a>-<b>
+            extract `<fileKey>` and convert `<a>-<b>` to `<a>:<b>`, then call the tool BEFORE writing any
+            JSX/CSS. Also call `mcp__figma__get_screenshot` for visual reference.
+            DO NOT implement UI without calling these tools when a Figma URL is present.
+
+            IMPORTANT:
+            - Only implement Milestone ${{ steps.milestone.outputs.number }}.
+            - **Do NOT create or switch branches.** The branch
+              `milestone-${{ steps.milestone.outputs.number }}-of-${{ steps.milestone.outputs.total }}-issue-${{ github.event.issue.number }}`
+              has already been created for you. Commit and push directly to it.
+            ${{ steps.milestone.outputs.prev_branch != '' && format('- Pipeline mode: PR must target `{0}` (NOT main). Stack the PR on top of the previous milestone.', steps.milestone.outputs.prev_branch) || '' }}
+
+      - name: Enforce milestone title prefix
+        if: success()
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          MILESTONE_NUM="${{ steps.milestone.outputs.number }}"
+          MILESTONE_TOTAL="${{ steps.milestone.outputs.total }}"
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          EXPECTED_PREFIX="[Milestone ${MILESTONE_NUM}/${MILESTONE_TOTAL}]"
+          BRANCH="milestone-${MILESTONE_NUM}-of-${MILESTONE_TOTAL}-issue-${ISSUE_NUMBER}"
+          PR_DATA=$(gh pr list --head "$BRANCH" --state open --json number,title --limit 1)
+          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.[0].number // empty')
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.[0].title // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR found for branch $BRANCH — skipping title guard."
+            exit 0
+          fi
+          if echo "$PR_TITLE" | grep -qF "$EXPECTED_PREFIX"; then
+            echo "Title already correct."
+          else
+            NEW_TITLE="${EXPECTED_PREFIX} ${PR_TITLE}"
+            gh pr edit "$PR_NUMBER" --title "$NEW_TITLE"
+          fi
+
+      - name: Post run summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const milestone = '${{ steps.milestone.outputs.number }}' || '?';
+            const total = '${{ steps.milestone.outputs.total }}' || '?';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: [
+                `📊 **Generator Run Summary** — Milestone ${milestone}/${total}`,
+                `| Metric | Value |`,
+                `|--------|-------|`,
+                `| Status | ${{ job.status === 'success' && '✅' || '❌' }} ${{ job.status }} |`,
+                `| Max turns | 200 |`,
+                `| [View run log](${runUrl}) | |`,
+              ].join('\n')
+            });
+
+  # ─── Rework: Auto-fix Evaluator feedback (mode=rework) ──────────────────────
+  claude-rework:
+    if: inputs.mode == 'rework'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check rework iteration count
+        id: rework-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt('${{ inputs.pr_number }}'),
+            });
+            const reworkCount = comments.data.filter(c =>
+              c.body && c.body.includes('CHANGES REQUESTED') && c.body.includes('Evaluator')
+            ).length;
+            core.setOutput('count', reworkCount);
+            if (reworkCount > 5) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: parseInt('${{ inputs.pr_number }}'),
+                body: `⚠️ **Rework limit reached** (${reworkCount} iterations). Manual intervention required.`
+              });
+              core.setFailed(`Rework limit reached (${reworkCount} iterations).`);
+            }
+
+      - name: Resolve PR info
+        id: pr-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: parseInt('${{ inputs.pr_number }}'),
+            });
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('base_ref', pr.base.ref);
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.pr-info.outputs.head_ref }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Clear all evaluation labels before rework
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = ['pge/pr:needs-rework', 'pge/pr:approved', 'pge/pr:rejected'];
+            for (const label of labels) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: parseInt('${{ inputs.pr_number }}'),
+                name: label
+              }).catch(() => {});
+            }
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.github_app_id }}
+          private-key: ${{ secrets.github_app_private_key }}
+
+      - name: Detect Figma references
+        id: detect-figma
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body --jq '.body' || echo "")
+          RESOLVED_ISSUE=$(echo "$PR_BODY" | grep -oE 'pge-source-issue:[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -n1 || echo "")
+          if {
+            if [ -n "$RESOLVED_ISSUE" ]; then
+              gh issue view "$RESOLVED_ISSUE" --comments --repo "$GH_REPO" \
+                   --json body,comments \
+                | jq -r '.body, (.comments[].body // "")' || true
+            fi
+            gh pr view "$PR_NUMBER" --repo "$GH_REPO" \
+                 --json body,comments,reviews \
+              | jq -r '.body, (.comments[].body // ""), (.reviews[].body // "")' || true
+            gh api "repos/$GH_REPO/pulls/$PR_NUMBER/comments" --jq '.[].body' || true
+          } | grep -iE 'figma\.com/(design|file|proto)/' > /dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
+          allowed_bots: ${{ inputs.bot_name }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          show_full_output: 'true'
+          max_turns: '100'
+          prompt: |
+            You are the **Generator (Rework Mode)** for this project.
+            This is rework iteration #${{ steps.rework-check.outputs.count }}.
+
+            The Evaluator reviewed this PR and requested changes.
+
+            ## SCOPE LOCK (READ FIRST — VIOLATING THIS IS A BUG)
+
+            You are operating on **EXACTLY ONE PR** in this run:
+            - Repository: `${{ github.repository }}`
+            - PR number:  **#${{ inputs.pr_number }}**
+            - Branch:     `${{ steps.pr-info.outputs.head_ref }}`
+
+            Hard rules (no exceptions):
+            1. Only read / push to PR #${{ inputs.pr_number }}.
+            2. Do NOT call list-PRs, list-issues, search-issues, or "recent" APIs.
+            3. Do NOT create a new PR. Fix and push to the existing branch only.
+
+            ## Your task
+
+            ### Step 1 — Build the issue checklist (NO CODE YET)
+
+            Read ALL comments on PR #${{ inputs.pr_number }}. Focus on the **latest** Evaluator
+            report (most recent "CHANGES REQUESTED" comment). Produce an explicit numbered list
+            of every ❌ and ⚠️ finding, grouped by dimension.
+            **Do NOT write or change any code until this checklist is complete.**
+
+            ### Step 2 — Sprint Contract re-anchor + scope creep check
+
+            1. Find the source issue number from the PR body marker `<!-- pge-source-issue: N -->`.
+               Read that issue's latest Planner Analysis comment.
+            2. Read the Sprint Contract. This is the ONLY authoritative list of what this PR delivers.
+            3. Diff current branch: `git diff origin/${{ steps.pr-info.outputs.base_ref }}...HEAD --name-only`
+               For every file, verify it is required by the Sprint Contract.
+
+            ### Step 3 — Read baselines and SKILL files
+
+            Read CLAUDE.md and all relevant SKILL files referenced in the feedback.
+            Always re-read: `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
+            and the touched sub-project's `development-standard/SKILL.md`.
+
+            ### Step 4 — Fix ALL issues from the checklist
+
+            Address every item. Do not stop after fixing the first few.
+
+            ### Step 5 — Pre-push self-verification (MANDATORY before committing)
+
+            Go through your checklist. For each item state:
+            - ✅ RESOLVED — describe the specific change (file + line)
+            - ❌ STILL OPEN — fix it now; do NOT push with any open ❌
+
+            ### Step 6 — Run verification
+
+            Run the build and test commands from CLAUDE.md for affected sub-projects.
+
+            ### Step 7 — SKILL update obligation
+
+            Apply the same SKILL-update obligation as the original Generator. Update SKILL files
+            for any new behavior, changed contracts, or revised patterns introduced by your rework.
+
+            ### Step 8 — Commit and push
+
+            Do NOT create a new PR. Fix and push to the existing branch.
+            The Evaluator will automatically re-review after your push.
+
+      - name: Trigger Evaluator via workflow_dispatch
+        if: success()
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh workflow run "${{ inputs.evaluator_workflow_name }}" \
+            -r "${{ steps.pr-info.outputs.head_ref }}" \
+            -f pr_number="${{ inputs.pr_number }}"
+          echo "Triggered Evaluator re-evaluation for PR #${{ inputs.pr_number }}"

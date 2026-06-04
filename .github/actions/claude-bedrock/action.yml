@@ -1,0 +1,110 @@
+name: 'Claude via AWS Bedrock'
+description: >
+  Configure AWS OIDC credentials and invoke claude-code-action via Bedrock.
+  Calling job must grant: permissions.id-token: write
+
+inputs:
+  prompt:
+    description: 'Prompt to send to Claude'
+    required: true
+  github_token:
+    description: 'GitHub token for API access'
+    required: true
+  aws_role:
+    description: >
+      IAM Role ARN to assume via GitHub OIDC for Bedrock access.
+      Example: arn:aws:iam::123456789012:role/github-actions-bedrock-pge
+    required: true
+  aws_region:
+    description: 'AWS region for Bedrock'
+    required: false
+    default: 'us-west-2'
+  max_turns:
+    description: 'Maximum number of agentic turns'
+    required: false
+    default: '30'
+  allowed_bots:
+    description: 'Comma-separated bot logins allowed to trigger the action (empty = no restriction)'
+    required: false
+    default: ''
+  show_full_output:
+    description: 'Stream the full Claude output to the Actions log'
+    required: false
+    default: 'false'
+  figma_token:
+    description: >
+      Figma Personal Access Token. When non-empty, registers the official
+      Figma MCP server (https://mcp.figma.com) so Claude can call
+      get_design_context, get_screenshot, get_metadata, etc.
+      Leave empty to skip MCP registration entirely.
+    required: false
+    default: ''
+  bot_id:
+    description: >
+      GitHub user ID for git config user.email attribution.
+      Format: <bot_id>+<bot_name>@users.noreply.github.com
+      Set to your GitHub App bot's user ID for correct commit attribution.
+      Defaults to github-actions[bot] (41898282) if not set.
+    required: false
+    default: ''
+  bot_name:
+    description: >
+      GitHub login for git config user.name and noreply email name segment.
+      Pair with bot_id. Defaults to claude[bot] if not set.
+    required: false
+    default: ''
+  model:
+    description: >
+      Bedrock cross-region inference profile ID.
+      Defaults to claude-sonnet-4-6. Override with claude-opus-4-6 for
+      the Planner role where deeper reasoning is preferred.
+    required: false
+    default: 'us.anthropic.claude-sonnet-4-6'
+
+# ─── Pinned versions ───────────────────────────────────────────────────────────
+# claude-code-action: v1.0.101
+# default model:     us.anthropic.claude-sonnet-4-6 (cross-region inference profile)
+# Figma MCP:         Official server at https://mcp.figma.com/v1/sse
+# ──────────────────────────────────────────────────────────────────────────────
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials (Bedrock OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws_role }}
+        aws-region: ${{ inputs.aws_region }}
+        role-duration-seconds: 3600
+
+    - name: Write Figma MCP config
+      if: inputs.figma_token != ''
+      shell: bash
+      env:
+        FIGMA_TOKEN: ${{ inputs.figma_token }}
+      run: |
+        command -v jq >/dev/null 2>&1 || { echo "::error::jq is required but not found."; exit 1; }
+        mkdir -p "${RUNNER_TEMP}"
+        jq -n \
+          --arg tok "${FIGMA_TOKEN}" \
+          '{mcpServers:{figma:{type:"sse",url:"https://mcp.figma.com/v1/sse",headers:{"X-Figma-Token":$tok}}}}' \
+          > "${RUNNER_TEMP}/figma-mcp-config.json"
+
+    - name: Invoke Claude
+      uses: anthropics/claude-code-action@v1.0.101
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        MCP_TIMEOUT: '60000'
+      with:
+        use_bedrock: "true"
+        github_token: ${{ inputs.github_token }}
+        prompt: ${{ inputs.prompt }}
+        allowed_bots: ${{ inputs.allowed_bots }}
+        show_full_output: ${{ inputs.show_full_output }}
+        bot_id: ${{ inputs.bot_id != '' && inputs.bot_id || '41898282' }}
+        bot_name: ${{ inputs.bot_name != '' && inputs.bot_name || 'claude[bot]' }}
+        claude_args: >-
+          --model ${{ inputs.model }}
+          --max-turns ${{ inputs.max_turns }}
+          --dangerously-skip-permissions
+          ${{ inputs.figma_token != '' && format('--mcp-config {0}/figma-mcp-config.json --allowedTools mcp__figma__get_design_context,mcp__figma__get_screenshot,mcp__figma__get_metadata', runner.temp) || '' }}

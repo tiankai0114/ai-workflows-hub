@@ -1,0 +1,106 @@
+# CLAUDE.md
+
+<!-- 
+  INSTRUCTIONS FOR FILLING IN THIS TEMPLATE:
+  1. Replace all [PLACEHOLDER] sections with your project's actual content
+  2. Delete sections that are not applicable
+  3. The more detail you provide, the better the AI agents will perform
+  4. This file is the AI agents' "brain" — treat it as living documentation
+-->
+
+## Project Overview
+
+[PROJECT_NAME] is a [brief description of the project].
+
+<!-- List sub-projects / packages in this monorepo (if applicable) -->
+Key components:
+- **[sub-project-1]/** — [description] (e.g. Next.js frontend)
+- **[sub-project-2]/** — [description] (e.g. NestJS backend API)
+- **[sub-project-3]/** — [description] (e.g. AWS CDK infrastructure)
+
+Root `package.json` defines a [yarn/npm] workspace covering [list packages].
+
+## Development Rules
+
+- **Never push to main directly** — Always create a feature branch and open a PR.
+
+## Naming Conventions
+
+[Describe your naming conventions for directories, packages, Docker images, etc.]
+
+| Directory | NPM package |
+|-----------|------------|
+| `[sub-project-1]/` | `@[scope]/[name]` |
+
+## Key Commands
+
+### Root
+```bash
+[install command]
+[dev server command]
+```
+
+### [Sub-project 1]
+```bash
+cd [sub-project-1]
+[dev command]
+[build command]
+[lint command]
+[test command]
+```
+
+### [Sub-project 2]
+```bash
+cd [sub-project-2]
+[dev command]
+[build command]
+[lint command]
+[test command]
+```
+
+## Testing Conventions
+
+| Package | Test location | Runner |
+|---------|--------------|--------|
+| **[sub-project-1]** | `[path]` | [Jest/Vitest/etc.] |
+| **[sub-project-2]** | `[path]` | [Jest/Vitest/etc.] |
+
+## Architectural Constraints
+
+1. [Key architectural rule 1, e.g. "Frontend must never import from backend"]
+2. [Key architectural rule 2, e.g. "All external API calls must go through the BFF layer"]
+3. [Key architectural rule 3]
+
+## Domain SKILL Files
+
+<!-- List the SKILL files AI agents should read for different tasks -->
+
+### Cross-repo Skills (always read)
+
+| Skill | Path |
+|-------|------|
+| Clean Code (baseline) | `.cursor/skills/clean-code/SKILL.md` |
+| Refactor (baseline) | `.cursor/skills/refactor/SKILL.md` |
+
+### [Sub-project 1] Skills
+
+| Skill | Path | Use When |
+|-------|------|----------|
+| Development Standard | `[sub-project-1]/.cursor/skills/development-standard/SKILL.md` | Any task in sub-project-1 |
+
+<!-- Add more as you create them -->
+
+## PGE Issue Labeling
+
+Every issue must have all three required label categories:
+
+| Category | Labels |
+|----------|--------|
+| **Type** | `pge/type:prd` or `pge/type:change` |
+| **Scope** | `pge/scope:[your-scope]` — add all affected scopes |
+| **Status** | `pge/status:triage` (always start here) |
+
+### Available scope labels
+<!-- Update these to match your project's scope labels in labels.yml -->
+- `pge/scope:[sub-project-1]`
+- `pge/scope:[sub-project-2]`

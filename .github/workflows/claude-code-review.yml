@@ -1,0 +1,146 @@
+name: "PGE: Code Review"
+
+# Reusable workflow — review human-authored PRs with Claude.
+# Consumer trigger example:
+#   on:
+#     pull_request:
+#       types: [opened, synchronize, ready_for_review, reopened]
+#   jobs:
+#     review:
+#       if: |
+#         !endsWith(github.event.pull_request.user.login, '[bot]') &&
+#         !contains(github.event.pull_request.title, '[Milestone') &&
+#         !endsWith(github.event.sender.login, '[bot]')
+#       uses: YOUR_ORG/ai-library/.github/workflows/claude-code-review.yml@v1
+#       with:
+#         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
+
+on:
+  workflow_call:
+    inputs:
+      aws_role:
+        description: 'IAM Role ARN for Bedrock OIDC'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+      bot_id:
+        description: 'GitHub App bot user ID'
+        required: false
+        type: string
+        default: ''
+      bot_name:
+        description: 'GitHub App bot login name'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Bedrock model ID'
+        required: false
+        type: string
+        default: 'us.anthropic.claude-sonnet-4-6'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  id-token: write
+
+jobs:
+  claude-code-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Assign github-actions[bot] as reviewer
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                reviewers: ['github-actions[bot]'],
+              });
+            } catch (e) {
+              console.log('requestReviewers skipped:', e.message);
+            }
+
+      - name: Review PR
+        uses: ./.github/actions/claude-bedrock
+        with:
+          github_token: ${{ github.token }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          bot_id: ${{ inputs.bot_id }}
+          bot_name: ${{ inputs.bot_name }}
+          model: ${{ inputs.model }}
+          max_turns: '100'
+          prompt: |
+            You are a **Code Reviewer** for this project.
+            This PR was authored by a human developer — review it thoughtfully.
+
+            ## SCOPE LOCK (READ FIRST — VIOLATING THIS IS A BUG)
+
+            You are reviewing **EXACTLY ONE PR** in this run:
+
+            - Repository: `${{ github.repository }}`
+            - PR number:  **#${{ github.event.pull_request.number }}**
+            - Branch:     `${{ github.event.pull_request.head.ref }}`
+            - Head SHA:   `${{ github.event.pull_request.head.sha }}`
+            - Title:      `${{ github.event.pull_request.title }}`
+
+            Hard rules (no exceptions):
+            1. You may ONLY read, comment on, or review PR **#${{ github.event.pull_request.number }}**.
+            2. Do NOT call `list pull requests`, `list issues`, `search issues`, or any "list/search/recent" API.
+            3. Every write call MUST target this PR's number.
+            4. When fetching the diff, fetch ONLY this PR's diff.
+            5. If a tool call would target a different PR/issue/repo, stop and report the attempted call.
+
+            ## Your task
+
+            1. Read CLAUDE.md to understand project structure, naming conventions, and architectural rules
+            2. Identify which sub-projects are changed in PR #${{ github.event.pull_request.number }} and read their relevant SKILL files
+            3. Read the PR diff thoroughly
+            4. Review against these dimensions:
+
+            **A. Architecture Compliance**
+            - Layer boundaries respected (server/client separation, controller→service→DAO)?
+            - Naming conventions match the rules in CLAUDE.md?
+
+            **B. Code Quality**
+            - Validation at all external boundaries?
+            - No secrets, credentials, or sensitive data exposed to client or logs?
+            - Error handling: no swallowed errors, no raw stack traces exposed to UI?
+
+            **C. SKILL Consistency**
+            - If new patterns or APIs are introduced, should any SKILL files be updated?
+              Flag it but do NOT require it as a blocking issue.
+
+            Post a concise review comment on PR #${{ github.event.pull_request.number }}.
+            Be specific — reference exact files and line numbers for every finding.
+            Do NOT block PRs for minor style issues; focus on architecture, security, and correctness.
+            If the PR looks good, say so clearly.
+
+            **Output format rules — use these symbols consistently:**
+            - ❌ **Must fix** — correctness bug, security issue, or architecture violation that should block merge
+            - ⚠️ **Should fix** — meaningful quality issue that is not strictly blocking
+            - ✅ **Looks good** — dimension is clean
+
+            End your comment with a summary table:
+            ```
+            | Dimension | Finding | Verdict |
+            |-----------|---------|---------|
+            | A — Architecture | ... | ❌ / ⚠️ / ✅ |
+            | B — Code Quality | ... | ❌ / ⚠️ / ✅ |
+            | C — SKILL Consistency | ... | ⚠️ / ✅ |
+            ```

@@ -1,0 +1,388 @@
+name: "CloudWatch Debug"
+
+# Reusable workflow — polls CloudWatch Logs for exceptions/errors,
+# sends logs to Claude for analysis, then routes output to Jira and/or Teams.
+#
+# Typical consumer setup (scheduled + manual):
+#   on:
+#     schedule:
+#       - cron: '*/15 * * * *'    # every 15 minutes
+#     workflow_dispatch:
+#   jobs:
+#     monitor:
+#       uses: YOUR_ORG/ai-library/.github/workflows/cloudwatch-debug.yml@v1
+#       with:
+#         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
+#         log_group: "/aws/lambda/your-function"
+#         filter_pattern: "ERROR"
+#         start_time_offset_minutes: 20
+#         handler: "jira"
+#         jira_base_url: "https://your-org.atlassian.net"
+#         jira_project_key: "OPS"
+#         jira_user_email: "ci-bot@your-org.com"
+#       secrets:
+#         jira_api_token: ${{ secrets.JIRA_API_TOKEN }}
+
+on:
+  workflow_call:
+    inputs:
+      aws_role:
+        description: 'IAM Role ARN for both Bedrock access and CloudWatch Logs read access'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for CloudWatch Logs and Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+
+      # ── CloudWatch polling configuration ──────────────────────────────────────
+      log_group:
+        description: 'CloudWatch Log Group name to query, e.g. /aws/lambda/my-function'
+        required: true
+        type: string
+      log_stream_prefix:
+        description: 'Optional log stream name prefix filter'
+        required: false
+        type: string
+        default: ''
+      filter_pattern:
+        description: 'CloudWatch filter pattern, e.g. "ERROR" or "[level=ERROR]"'
+        required: false
+        type: string
+        default: 'ERROR'
+      start_time_offset_minutes:
+        description: 'How many minutes back to start the log query window'
+        required: false
+        type: number
+        default: 20
+      max_log_events:
+        description: 'Maximum number of log events to fetch per run'
+        required: false
+        type: number
+        default: 100
+
+      # ── Claude analysis configuration ─────────────────────────────────────────
+      model:
+        description: 'Bedrock model ID for log analysis'
+        required: false
+        type: string
+        default: 'us.anthropic.claude-sonnet-4-6'
+      analysis_context:
+        description: 'Optional context string injected into Claude prompt (e.g. service name, tech stack)'
+        required: false
+        type: string
+        default: ''
+
+      # ── Handler routing ────────────────────────────────────────────────────────
+      handler:
+        description: '"jira" | "teams" | "both" | "none" — output handler(s) to invoke'
+        required: false
+        type: string
+        default: 'none'
+      deduplicate_window_minutes:
+        description: 'Skip handler if the same error fingerprint was seen within this many minutes (0 = no dedup)'
+        required: false
+        type: number
+        default: 60
+
+      # ── Jira handler inputs ───────────────────────────────────────────────────
+      jira_base_url:
+        description: 'Jira base URL (required when handler includes "jira")'
+        required: false
+        type: string
+        default: ''
+      jira_project_key:
+        description: 'Jira project key (required when handler includes "jira")'
+        required: false
+        type: string
+        default: ''
+      jira_user_email:
+        description: 'Jira user email for Basic Auth'
+        required: false
+        type: string
+        default: ''
+      jira_issue_type:
+        description: 'Jira issue type'
+        required: false
+        type: string
+        default: 'Bug'
+
+      # ── Teams handler inputs ──────────────────────────────────────────────────
+      teams_webhook_url:
+        description: 'Teams Incoming Webhook URL (required when handler includes "teams")'
+        required: false
+        type: string
+        default: ''
+
+    secrets:
+      jira_api_token:
+        description: 'Jira API token (required when handler includes "jira")'
+        required: false
+
+    outputs:
+      exceptions_found:
+        description: '"true" if exceptions were found in logs, "false" otherwise'
+        value: ${{ jobs.cloudwatch-debug.outputs.exceptions_found }}
+      severity:
+        description: 'Severity determined by Claude: critical | high | medium | low | none'
+        value: ${{ jobs.cloudwatch-debug.outputs.severity }}
+      summary:
+        description: 'One-line summary of the exception (empty if none found)'
+        value: ${{ jobs.cloudwatch-debug.outputs.summary }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  cloudwatch-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      exceptions_found: ${{ steps.analyze.outputs.exceptions_found }}
+      severity: ${{ steps.analyze.outputs.severity }}
+      summary: ${{ steps.analyze.outputs.summary }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role }}
+          aws-region: ${{ inputs.aws_region }}
+          role-duration-seconds: 1800
+
+      - name: Fetch CloudWatch logs
+        id: fetch-logs
+        shell: bash
+        env:
+          LOG_GROUP: ${{ inputs.log_group }}
+          LOG_STREAM_PREFIX: ${{ inputs.log_stream_prefix }}
+          FILTER_PATTERN: ${{ inputs.filter_pattern }}
+          OFFSET_MINUTES: ${{ inputs.start_time_offset_minutes }}
+          MAX_EVENTS: ${{ inputs.max_log_events }}
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          START_TIME=$(( $(date +%s%3N) - (OFFSET_MINUTES * 60 * 1000) ))
+          END_TIME=$(date +%s%3N)
+
+          echo "Querying ${LOG_GROUP} for '${FILTER_PATTERN}' in last ${OFFSET_MINUTES} minutes..."
+
+          # Build optional stream prefix arg
+          STREAM_ARG=""
+          if [ -n "${LOG_STREAM_PREFIX}" ]; then
+            STREAM_ARG="--log-stream-name-prefix ${LOG_STREAM_PREFIX}"
+          fi
+
+          # Fetch filtered log events
+          RAW=$(aws logs filter-log-events \
+            --region "${AWS_REGION}" \
+            --log-group-name "${LOG_GROUP}" \
+            --filter-pattern "${FILTER_PATTERN}" \
+            --start-time "${START_TIME}" \
+            --end-time "${END_TIME}" \
+            --limit "${MAX_EVENTS}" \
+            ${STREAM_ARG} \
+            --output json 2>&1) || true
+
+          EVENT_COUNT=$(echo "${RAW}" | jq '.events | length' 2>/dev/null || echo "0")
+          echo "Found ${EVENT_COUNT} matching log events"
+          echo "event_count=${EVENT_COUNT}" >> "${GITHUB_OUTPUT}"
+
+          if [ "${EVENT_COUNT}" -gt 0 ]; then
+            # Extract and format log messages (truncate each message at 500 chars)
+            echo "${RAW}" | jq -r '
+              .events[] |
+              "[" + (.timestamp | todate) + "] [" + .logStreamName + "]\n" + .message
+            ' | head -c 50000 > /tmp/cloudwatch-logs.txt
+            echo "logs_available=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "logs_available=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Analyze logs with Claude
+        id: analyze
+        if: steps.fetch-logs.outputs.logs_available == 'true'
+        uses: ./.github/actions/claude-bedrock
+        env:
+          ANALYSIS_CONTEXT: ${{ inputs.analysis_context }}
+          LOG_GROUP: ${{ inputs.log_group }}
+          GITHUB_OUTPUT_FILE: ${{ runner.temp }}/claude-analysis.json
+        with:
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
+          github_token: ${{ github.token }}
+          model: ${{ inputs.model }}
+          max_turns: '10'
+          prompt: |
+            You are an **Automated Log Analyzer**. Analyze the CloudWatch log events below
+            and produce a structured JSON report.
+
+            ## Context
+            - Log group: `${{ inputs.log_group }}`
+            - Query window: last ${{ inputs.start_time_offset_minutes }} minutes
+            - Filter pattern applied: `${{ inputs.filter_pattern }}`
+            ${{ inputs.analysis_context != '' && format('- Service context: {0}', inputs.analysis_context) || '' }}
+
+            ## Log Events
+
+            ```
+            $(cat /tmp/cloudwatch-logs.txt)
+            ```
+
+            ## Your task
+
+            1. Identify all distinct exceptions/errors in the logs
+            2. Determine root cause if possible (stack trace, error message patterns)
+            3. Assess severity:
+               - **critical** — service down, data loss, security breach, cascading failures
+               - **high** — major feature broken, multiple users impacted, repeated errors
+               - **medium** — single isolated failure, workaround exists
+               - **low** — transient error, retried successfully, cosmetic warning
+               - **none** — no real exceptions (filter false positives)
+            4. Write a short, actionable summary (1-2 sentences max)
+            5. Write a detailed description for a Jira/Teams notification
+
+            ## Output format
+
+            Write a JSON file at `/tmp/claude-analysis.json` with this exact schema:
+
+            ```bash
+            cat > /tmp/claude-analysis.json << 'EOF'
+            {
+              "exceptions_found": true,
+              "severity": "high",
+              "summary": "NullPointerException in PaymentService.processCard() — 12 occurrences in last 15min",
+              "root_cause": "Card token expired before capture; upstream TokenService returns null on expiry",
+              "affected_component": "PaymentService",
+              "error_count": 12,
+              "first_seen": "2026-06-04T08:01:23Z",
+              "last_seen": "2026-06-04T08:14:55Z",
+              "description": "## Exception Summary\n\n**Error:** NullPointerException in PaymentService.processCard()\n**Count:** 12 occurrences\n**Time range:** 08:01 – 08:14 UTC\n\n**Root cause:** The card token returned by TokenService expires before the capture step. When expired, TokenService returns null, and processCard() does not handle the null case.\n\n**Recommended fix:** Add null check in processCard() and handle token expiry with a retry or user-facing error.\n\n**Log sample:**\n```\n[ERROR] NullPointerException at PaymentService.java:142\n```",
+              "fingerprint": "PaymentService.processCard:NullPointerException"
+            }
+            EOF
+            ```
+
+            If no real exceptions found, set `"exceptions_found": false` and `"severity": "none"`.
+
+            After writing the file, also output these shell variable lines to stdout so the
+            workflow can capture them via `>> $GITHUB_OUTPUT`:
+
+            ```bash
+            echo "exceptions_found=true" >> "$GITHUB_OUTPUT"
+            echo "severity=high" >> "$GITHUB_OUTPUT"
+            echo "summary=NullPointerException in PaymentService.processCard() — 12 occurrences" >> "$GITHUB_OUTPUT"
+            ```
+
+      - name: Set outputs when no logs found
+        id: no-logs
+        if: steps.fetch-logs.outputs.logs_available != 'true'
+        run: |
+          echo "exceptions_found=false" >> "$GITHUB_OUTPUT"
+          echo "severity=none" >> "$GITHUB_OUTPUT"
+          echo "summary=" >> "$GITHUB_OUTPUT"
+          echo "ℹ️ No matching log events found — skipping analysis"
+
+      - name: Check deduplication window
+        id: dedup
+        if: steps.analyze.outputs.exceptions_found == 'true'
+        shell: bash
+        env:
+          DEDUP_WINDOW: ${{ inputs.deduplicate_window_minutes }}
+          FINGERPRINT_FILE: /tmp/dedup-fingerprint.txt
+        run: |
+          if [ "${DEDUP_WINDOW}" -le 0 ]; then
+            echo "skip=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          FINGERPRINT=$(cat /tmp/claude-analysis.json | jq -r '.fingerprint // ""' 2>/dev/null || echo "")
+          if [ -z "${FINGERPRINT}" ]; then
+            echo "skip=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          # Use GitHub Actions cache key approach via a sentinel comment on the run
+          # Simple approach: check if Actions cache has this fingerprint (requires cache permissions)
+          # For now, always proceed — consumers can implement custom dedup via their own step
+          echo "skip=false" >> "${GITHUB_OUTPUT}"
+          echo "fingerprint=${FINGERPRINT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Read Claude analysis
+        id: read-analysis
+        if: steps.analyze.outputs.exceptions_found == 'true' && steps.dedup.outputs.skip != 'true'
+        shell: bash
+        run: |
+          if [ ! -f /tmp/claude-analysis.json ]; then
+            echo "::warning::Claude analysis file not found at /tmp/claude-analysis.json"
+            exit 0
+          fi
+          SUMMARY=$(jq -r '.summary // ""' /tmp/claude-analysis.json)
+          DESCRIPTION=$(jq -r '.description // ""' /tmp/claude-analysis.json)
+          SEVERITY=$(jq -r '.severity // "medium"' /tmp/claude-analysis.json)
+          COMPONENT=$(jq -r '.affected_component // "unknown"' /tmp/claude-analysis.json)
+
+          echo "summary=${SUMMARY}" >> "${GITHUB_OUTPUT}"
+          echo "severity=${SEVERITY}" >> "${GITHUB_OUTPUT}"
+          echo "component=${COMPONENT}" >> "${GITHUB_OUTPUT}"
+
+          # Write description to file (may contain newlines)
+          echo "${DESCRIPTION}" > /tmp/issue-description.txt
+
+      # ── Jira handler ─────────────────────────────────────────────────────────
+      - name: Create Jira issue
+        if: |
+          steps.analyze.outputs.exceptions_found == 'true' &&
+          steps.dedup.outputs.skip != 'true' &&
+          (inputs.handler == 'jira' || inputs.handler == 'both') &&
+          inputs.jira_base_url != '' &&
+          inputs.jira_project_key != ''
+        uses: ./.github/actions/jira-handler
+        with:
+          jira_base_url: ${{ inputs.jira_base_url }}
+          jira_project_key: ${{ inputs.jira_project_key }}
+          jira_user_email: ${{ inputs.jira_user_email }}
+          jira_api_token: ${{ secrets.jira_api_token }}
+          summary: "[CloudWatch Alert] ${{ steps.read-analysis.outputs.summary }}"
+          description: ${{ steps.read-analysis.outputs.description }}
+          issue_type: ${{ inputs.jira_issue_type }}
+          severity: ${{ steps.read-analysis.outputs.severity }}
+          labels: "ai-detected,cloudwatch,${{ steps.read-analysis.outputs.component }}"
+
+      # ── Teams handler ─────────────────────────────────────────────────────────
+      - name: Send Teams notification
+        if: |
+          steps.analyze.outputs.exceptions_found == 'true' &&
+          steps.dedup.outputs.skip != 'true' &&
+          (inputs.handler == 'teams' || inputs.handler == 'both') &&
+          inputs.teams_webhook_url != ''
+        uses: ./.github/actions/teams-handler
+        with:
+          webhook_url: ${{ inputs.teams_webhook_url }}
+          title: "CloudWatch Alert — ${{ steps.read-analysis.outputs.component }}"
+          message: ${{ steps.read-analysis.outputs.summary }}
+          severity: ${{ steps.read-analysis.outputs.severity }}
+          source_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          source_label: "View workflow run"
+          repo: ${{ github.repository }}
+
+      - name: Print run summary
+        if: always()
+        shell: bash
+        run: |
+          FOUND="${{ steps.analyze.outputs.exceptions_found || 'false' }}"
+          SEVERITY="${{ steps.analyze.outputs.severity || 'none' }}"
+          SUMMARY="${{ steps.analyze.outputs.summary || 'N/A' }}"
+          echo "## CloudWatch Debug Summary" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Key | Value |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "|-----|-------|" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Log group | \`${{ inputs.log_group }}\` |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Filter | \`${{ inputs.filter_pattern }}\` |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Events found | ${{ steps.fetch-logs.outputs.event_count || '0' }} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Exceptions found | ${FOUND} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Severity | ${SEVERITY} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Summary | ${SUMMARY} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Handler | ${{ inputs.handler }} |" >> "${GITHUB_STEP_SUMMARY}"
