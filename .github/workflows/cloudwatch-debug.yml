@@ -10,7 +10,7 @@ name: "CloudWatch Debug"
 #     workflow_dispatch:
 #   jobs:
 #     monitor:
-#       uses: YOUR_ORG/ai-library/.github/workflows/cloudwatch-debug.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/cloudwatch-debug.yml@v1
 #       with:
 #         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
 #         log_group: "/aws/lambda/your-function"

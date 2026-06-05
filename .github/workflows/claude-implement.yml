@@ -14,7 +14,7 @@ name: "PGE: Generator"
 #       if: |
 #         (github.event_name == 'issues' && github.event.label.name == 'pge/status:implement') ||
 #         (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
-#       uses: YOUR_ORG/ai-library/.github/workflows/claude-implement.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-implement.yml@v1
 #       with:
 #         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
 #         bot_name: "your-app[bot]"

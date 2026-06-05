@@ -1,4 +1,4 @@
-# ai-library
+# ai-workflows-hub
 
 AI-driven development workflow library. 供任何 GitHub repo 通过 Reusable Workflows 引用，零基础设施、零运维。
 
@@ -36,15 +36,15 @@ AI-driven development workflow library. 供任何 GitHub repo 通过 Reusable Wo
 
 ```bash
 # 从 ai-library 仓库克隆或下载 templates/ 目录
-gh repo clone YOUR_ORG/ai-library /tmp/ai-library
+gh repo clone tiankai0114/ai-workflows-hub /tmp/ai-workflows-hub
 
 # 复制模板到目标 repo
-cp /tmp/ai-library/templates/labels.yml .github/labels.yml
-cp -r /tmp/ai-library/templates/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE
-cp /tmp/ai-library/templates/CLAUDE.md.template CLAUDE.md
+cp /tmp/ai-workflows-hub/templates/labels.yml .github/labels.yml
+cp -r /tmp/ai-workflows-hub/templates/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE
+cp /tmp/ai-workflows-hub/templates/CLAUDE.md.template CLAUDE.md
 mkdir -p .cursor/skills
-cp -r /tmp/ai-library/templates/cursor-skills/clean-code .cursor/skills/
-cp -r /tmp/ai-library/templates/cursor-skills/refactor .cursor/skills/
+cp -r /tmp/ai-workflows-hub/templates/cursor-skills/clean-code .cursor/skills/
+cp -r /tmp/ai-workflows-hub/templates/cursor-skills/refactor .cursor/skills/
 ```
 
 ### 2. 导入 PGE 标签
@@ -100,7 +100,7 @@ on:
 jobs:
   plan:
     if: github.event.label.name == 'pge/status:ready'
-    uses: YOUR_ORG/ai-library/.github/workflows/claude-plan.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-plan.yml@v1
     with:
       aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
@@ -122,7 +122,7 @@ jobs:
     if: |
       (github.event_name == 'issues' && github.event.label.name == 'pge/status:implement') ||
       (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
-    uses: YOUR_ORG/ai-library/.github/workflows/claude-implement.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-implement.yml@v1
     with:
       aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
@@ -154,7 +154,7 @@ jobs:
       github.event_name == 'pull_request_review' &&
       github.event.review.state == 'changes_requested' &&
       endsWith(github.event.pull_request.user.login, '[bot]')
-    uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
     with:
       aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
@@ -169,7 +169,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.action == 'opened' && endsWith(github.event.pull_request.user.login, '[bot]')) ||
       (github.event.action == 'synchronize' && !endsWith(github.event.sender.login, '[bot]') && endsWith(github.event.pull_request.user.login, '[bot]'))
-    uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
     with:
       aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
@@ -182,7 +182,7 @@ jobs:
       figma_token: ${{ secrets.FIGMA_TOKEN }}
   milestone-advance:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true && contains(github.event.pull_request.title, '[Milestone')
-    uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
     with:
       aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
@@ -206,7 +206,7 @@ jobs:
       !endsWith(github.event.pull_request.user.login, '[bot]') &&
       !contains(github.event.pull_request.title, '[Milestone') &&
       !endsWith(github.event.sender.login, '[bot]')
-    uses: YOUR_ORG/ai-library/.github/workflows/claude-code-review.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-code-review.yml@v1
     with:
       aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
 ```
@@ -220,7 +220,7 @@ on:
 jobs:
   decompose:
     if: github.event.label.name == 'pge/status:decompose'
-    uses: YOUR_ORG/ai-library/.github/workflows/claude-decompose.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-decompose.yml@v1
     with:
       aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
 ```
@@ -238,7 +238,7 @@ on:
   workflow_dispatch:
 jobs:
   monitor:
-    uses: YOUR_ORG/ai-library/.github/workflows/cloudwatch-debug.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/cloudwatch-debug.yml@v1
     with:
       aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       log_group: "/aws/lambda/your-function"

@@ -6,7 +6,7 @@ name: "PGE: Planner"
 #   jobs:
 #     plan:
 #       if: github.event.label.name == 'pge/status:ready'
-#       uses: YOUR_ORG/ai-library/.github/workflows/claude-plan.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-plan.yml@v1
 #       with:
 #         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
 #         bot_name: "your-app[bot]"

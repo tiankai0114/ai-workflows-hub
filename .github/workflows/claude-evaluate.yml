@@ -16,15 +16,15 @@ name: "PGE: Evaluator"
 #   jobs:
 #     human-rework:
 #       if: github.event_name == 'pull_request_review' && ...
-#       uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
 #       with: { mode: "human-rework", pr_number: ... }
 #     evaluate:
 #       if: github.event_name == 'workflow_dispatch' || ...
-#       uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
 #       with: { mode: "evaluate", pr_number: ... }
 #     milestone-advance:
 #       if: github.event.action == 'closed' && github.event.pull_request.merged == true && ...
-#       uses: YOUR_ORG/ai-library/.github/workflows/claude-evaluate.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
 #       with: { mode: "milestone-advance", pr_number: ... }
 
 on:
