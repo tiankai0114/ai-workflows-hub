@@ -33,11 +33,6 @@ on:
         type: string
         default: 'us.anthropic.claude-sonnet-4-6'
 
-    secrets:
-      figma_token:
-        description: 'Figma PAT (optional)'
-        required: false
-
       aws_role:
         description: 'IAM Role ARN for Bedrock access'
         required: true
@@ -47,6 +42,11 @@ on:
         required: false
         type: string
         default: 'us-west-2'
+
+    secrets:
+      figma_token:
+        description: 'Figma Personal Access Token (optional, enables design context)'
+        required: false
 
 permissions:
   contents: read

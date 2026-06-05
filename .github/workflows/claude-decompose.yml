@@ -28,15 +28,6 @@ on:
         type: string
         default: 'us.anthropic.claude-sonnet-4-6'
 
-      aws_role:
-        description: 'IAM Role ARN for Bedrock access'
-        required: true
-        type: string
-      aws_region:
-        description: 'AWS region for Bedrock'
-        required: false
-        type: string
-        default: 'us-west-2'
 
 permissions:
   contents: read
