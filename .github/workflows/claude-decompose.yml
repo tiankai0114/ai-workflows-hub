@@ -26,7 +26,12 @@ on:
         description: 'Bedrock model ID'
         required: false
         type: string
-        default: 'us.anthropic.claude-sonnet-4-6'
+        default: 'claude4.6-bedrock'
+
+    secrets:
+      api_key:
+        description: 'LiteLLM API key'
+        required: true
 
 permissions:
   contents: read
