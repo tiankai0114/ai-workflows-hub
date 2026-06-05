@@ -294,7 +294,7 @@ jobs:
                 `📊 **Generator Run Summary** — Milestone ${milestone}/${total}`,
                 `| Metric | Value |`,
                 `|--------|-------|`,
-                `| Status | ${{ job.status === 'success' && '✅' || '❌' }} ${{ job.status }} |`,
+                `| Status | ${{ job.status == 'success' && '✅' || '❌' }} ${{ job.status }} |`,
                 `| Max turns | 200 |`,
                 `| [View run log](${runUrl}) | |`,
               ].join('\n')
