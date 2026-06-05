@@ -80,7 +80,7 @@ jobs:
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
-          max_turns: '100'
+          max_turns: '30'
           prompt: |
             You are a **Code Reviewer** for this project.
             This PR was authored by a human developer — review it thoughtfully.
@@ -104,23 +104,29 @@ jobs:
 
             ## Your task
 
-            1. Read CLAUDE.md to understand project structure, naming conventions, and architectural rules
-            2. Identify which sub-projects are changed in PR #${{ github.event.pull_request.number }} and read their relevant SKILL files
-            3. Read the PR diff thoroughly
-            4. Review against these dimensions:
+            **Step 1 — Gather project context (optional, skip if files do not exist)**
+            - If `CLAUDE.md` exists at the repo root, read it to understand project structure and conventions.
+            - If `.cursor/skills/` exists, read any SKILL files relevant to the changed code.
+            - If neither file exists, skip this step entirely and proceed to Step 2.
+            - Do NOT search for these files in subdirectories or retry if they return 404.
+
+            **Step 2 — Read the PR diff**
+            - Fetch the diff for PR #${{ github.event.pull_request.number }} only.
+
+            **Step 3 — Review against these dimensions**
 
             **A. Architecture Compliance**
             - Layer boundaries respected (server/client separation, controller→service→DAO)?
-            - Naming conventions match the rules in CLAUDE.md?
+            - Naming conventions consistent with the project?
 
             **B. Code Quality**
             - Validation at all external boundaries?
             - No secrets, credentials, or sensitive data exposed to client or logs?
             - Error handling: no swallowed errors, no raw stack traces exposed to UI?
 
-            **C. SKILL Consistency**
-            - If new patterns or APIs are introduced, should any SKILL files be updated?
-              Flag it but do NOT require it as a blocking issue.
+            **C. General Best Practices**
+            - If new patterns or APIs are introduced, flag if documentation should be updated.
+              This is NOT a blocking issue.
 
             Post a concise review comment on PR #${{ github.event.pull_request.number }}.
             Be specific — reference exact files and line numbers for every finding.
@@ -138,5 +144,5 @@ jobs:
             |-----------|---------|---------|
             | A — Architecture | ... | ❌ / ⚠️ / ✅ |
             | B — Code Quality | ... | ❌ / ⚠️ / ✅ |
-            | C — SKILL Consistency | ... | ⚠️ / ✅ |
+            | C — Best Practices | ... | ⚠️ / ✅ |
             ```
