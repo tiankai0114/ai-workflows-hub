@@ -393,12 +393,12 @@ git tag -f v1 && git push origin v1 --force
 
 ## 参考：demo repo 实际配置值
 
-以 `tiankai0114/search-android-demo-app` 为例：
+以 `tiankai0114/search-android-demo-app` 为例（实际值保存在 repo secrets 中，不在此公开）：
 
-| 参数 | 值 |
+| 参数 | 示例格式 |
 |------|----|
-| `aws_role` | `arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge` |
-| `bot_name` | `ai-test-kai[bot]` |
-| `bot_id` | `290981734` |
-| GitHub App ID（`GH_APP_ID`） | `3969724` |
-| App name | `ai-test-kai` |
+| `aws_role` | `arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>` |
+| `bot_name` | `your-app-name[bot]` |
+| `bot_id` | 通过 `https://api.github.com/users/your-app-name[bot]` 查询 `id` 字段 |
+| GitHub App ID（`GH_APP_ID`） | GitHub App 创建后页面顶部显示的数字 |
+| App name | 创建 GitHub App 时填写的名称 |
