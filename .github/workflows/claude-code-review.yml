@@ -13,20 +13,10 @@ name: "PGE: Code Review"
 #         !endsWith(github.event.sender.login, '[bot]')
 #       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-code-review.yml@v1
 #       with:
-#         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
 
 on:
   workflow_call:
     inputs:
-      aws_role:
-        description: 'IAM Role ARN for Bedrock OIDC'
-        required: true
-        type: string
-      aws_region:
-        description: 'AWS region for Bedrock'
-        required: false
-        type: string
-        default: 'us-west-2'
       bot_id:
         description: 'GitHub App bot user ID'
         required: false
@@ -47,7 +37,6 @@ permissions:
   contents: read
   pull-requests: write
   issues: read
-  id-token: write
 
 jobs:
   claude-code-review:
@@ -79,8 +68,7 @@ jobs:
         uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
-          aws_role: ${{ inputs.aws_role }}
-          aws_region: ${{ inputs.aws_region }}
+          api_key: ${{ secrets.api_key }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}

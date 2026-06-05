@@ -16,7 +16,6 @@ name: "PGE: Generator"
 #         (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
 #       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-implement.yml@v1
 #       with:
-#         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
 #         bot_name: "your-app[bot]"
 #         bot_id: "YOUR_BOT_ID"
 #         mode: ${{ github.event.label.name == 'pge/pr:needs-rework' && 'rework' || 'implement' }}
@@ -30,15 +29,6 @@ name: "PGE: Generator"
 on:
   workflow_call:
     inputs:
-      aws_role:
-        description: 'IAM Role ARN for Bedrock OIDC'
-        required: true
-        type: string
-      aws_region:
-        description: 'AWS region for Bedrock'
-        required: false
-        type: string
-        default: 'us-west-2'
       bot_id:
         description: 'GitHub App bot user ID for commit attribution'
         required: true
@@ -82,7 +72,6 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  id-token: write
 
 jobs:
   # ─── Generator: Implement when mode=implement ───────────────────────────────
@@ -201,8 +190,7 @@ jobs:
           github_token: ${{ steps.app-token.outputs.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
           allowed_bots: ${{ inputs.bot_name }}
-          aws_role: ${{ inputs.aws_role }}
-          aws_region: ${{ inputs.aws_region }}
+          api_key: ${{ secrets.api_key }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
@@ -405,8 +393,7 @@ jobs:
           github_token: ${{ steps.app-token.outputs.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
           allowed_bots: ${{ inputs.bot_name }}
-          aws_role: ${{ inputs.aws_role }}
-          aws_region: ${{ inputs.aws_region }}
+          api_key: ${{ secrets.api_key }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}

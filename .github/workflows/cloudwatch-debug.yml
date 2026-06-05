@@ -12,7 +12,7 @@ name: "CloudWatch Debug"
 #     monitor:
 #       uses: tiankai0114/ai-workflows-hub/.github/workflows/cloudwatch-debug.yml@v1
 #       with:
-#         aws_role: "arn:aws:iam::ACCOUNT:role/your-role"
+#         aws_role: "arn:aws:iam::ACCOUNT:role/your-cw-role"
 #         log_group: "/aws/lambda/your-function"
 #         filter_pattern: "ERROR"
 #         start_time_offset_minutes: 20
@@ -21,17 +21,18 @@ name: "CloudWatch Debug"
 #         jira_project_key: "OPS"
 #         jira_user_email: "ci-bot@your-org.com"
 #       secrets:
+#         api_key: ${{ secrets.LITELLM_API_KEY }}
 #         jira_api_token: ${{ secrets.JIRA_API_TOKEN }}
 
 on:
   workflow_call:
     inputs:
       aws_role:
-        description: 'IAM Role ARN for both Bedrock access and CloudWatch Logs read access'
+        description: 'IAM Role ARN for CloudWatch Logs read access (OIDC)'
         required: true
         type: string
       aws_region:
-        description: 'AWS region for CloudWatch Logs and Bedrock'
+        description: 'AWS region for CloudWatch Logs'
         required: false
         type: string
         default: 'us-west-2'
@@ -64,10 +65,10 @@ on:
 
       # ── Claude analysis configuration ─────────────────────────────────────────
       model:
-        description: 'Bedrock model ID for log analysis'
+        description: 'LiteLLM model alias for log analysis'
         required: false
         type: string
-        default: 'us.anthropic.claude-sonnet-4-6'
+        default: 'claude4.6-bedrock'
       analysis_context:
         description: 'Optional context string injected into Claude prompt (e.g. service name, tech stack)'
         required: false
@@ -116,6 +117,9 @@ on:
         default: ''
 
     secrets:
+      api_key:
+        description: 'LiteLLM API key for Claude log analysis'
+        required: true
       jira_api_token:
         description: 'Jira API token (required when handler includes "jira")'
         required: false
@@ -211,8 +215,7 @@ jobs:
           LOG_GROUP: ${{ inputs.log_group }}
           GITHUB_OUTPUT_FILE: ${{ runner.temp }}/claude-analysis.json
         with:
-          aws_role: ${{ inputs.aws_role }}
-          aws_region: ${{ inputs.aws_region }}
+          api_key: ${{ secrets.api_key }}
           github_token: ${{ github.token }}
           model: ${{ inputs.model }}
           max_turns: '10'

@@ -8,7 +8,7 @@ AI-driven development workflow library. 供任何 GitHub repo 通过 Reusable Wo
 
 | 文件 | 类型 | 说明 |
 |------|------|------|
-| `.github/actions/claude-bedrock/` | Composite Action | Claude via AWS Bedrock 调用核心 |
+| `.github/actions/claude-bedrock/` | Composite Action | Claude via LiteLLM 调用核心（兼容 Anthropic API） |
 | `.github/actions/jira-handler/` | Composite Action | 调用 Jira REST API 创建 Issue |
 | `.github/actions/teams-handler/` | Composite Action | 发送 Teams 通知 |
 | `.github/workflows/claude-plan.yml` | Reusable Workflow | PGE Planner — 分析 Issue，生成里程碑计划 |
@@ -57,24 +57,16 @@ gh label import .github/labels.yml
 
 编辑 `CLAUDE.md`，填入项目描述、子模块结构、开发规范、key commands 等内容。这是 AI Agent 的"知识库"，内容越详细效果越好。
 
-### 4. 创建 AWS IAM Role（信任 GitHub OIDC）
+### 4. 添加 LiteLLM API Key Secret
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": { "Federated": "arn:aws:iam::YOUR_ACCOUNT:oidc-provider/token.actions.githubusercontent.com" },
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
-      "StringLike": { "token.actions.githubusercontent.com:sub": "repo:YOUR_ORG/YOUR_REPO:*" }
-    }
-  }]
-}
-```
+在目标 repo 的 **Settings → Secrets and variables → Actions** 中添加：
 
-赋予权限：`AmazonBedrockFullAccess`（或 scope 到 `bedrock:InvokeModel`）。
+| Secret 名称 | 值 | 说明 |
+|------------|-----|------|
+| `LITELLM_API_KEY` | `sk-xxxx...` | LiteLLM 分配的 API Key（即 `ANTHROPIC_AUTH_TOKEN`） |
+
+> 所有 workflow 通过 `secrets: api_key: ${{ secrets.LITELLM_API_KEY }}` 传入，  
+> action 内部自动设置 `ANTHROPIC_API_KEY` 和 `ANTHROPIC_BASE_URL` 环境变量。
 
 ### 5. 创建 GitHub App
 
@@ -102,10 +94,10 @@ jobs:
     if: github.event.label.name == 'pge/status:ready'
     uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-plan.yml@v1
     with:
-      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
       bot_id: "YOUR_BOT_ID"
     secrets:
+      api_key: ${{ secrets.LITELLM_API_KEY }}
       figma_token: ${{ secrets.FIGMA_TOKEN }}
 ```
 
@@ -124,12 +116,12 @@ jobs:
       (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
     uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-implement.yml@v1
     with:
-      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
       bot_id: "YOUR_BOT_ID"
       mode: ${{ github.event.label.name == 'pge/pr:needs-rework' && 'rework' || 'implement' }}
       pr_number: ${{ github.event.pull_request.number || '' }}
     secrets:
+      api_key: ${{ secrets.LITELLM_API_KEY }}
       github_app_id: ${{ secrets.GH_APP_ID }}
       github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       figma_token: ${{ secrets.FIGMA_TOKEN }}
@@ -156,12 +148,12 @@ jobs:
       endsWith(github.event.pull_request.user.login, '[bot]')
     uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
     with:
-      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
       bot_id: "YOUR_BOT_ID"
       mode: "human-rework"
       pr_number: ${{ github.event.pull_request.number }}
     secrets:
+      api_key: ${{ secrets.LITELLM_API_KEY }}
       github_app_id: ${{ secrets.GH_APP_ID }}
       github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
   evaluate:
@@ -171,12 +163,12 @@ jobs:
       (github.event.action == 'synchronize' && !endsWith(github.event.sender.login, '[bot]') && endsWith(github.event.pull_request.user.login, '[bot]'))
     uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
     with:
-      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
       bot_id: "YOUR_BOT_ID"
       mode: "evaluate"
       pr_number: ${{ github.event.inputs.pr_number || github.event.pull_request.number }}
     secrets:
+      api_key: ${{ secrets.LITELLM_API_KEY }}
       github_app_id: ${{ secrets.GH_APP_ID }}
       github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       figma_token: ${{ secrets.FIGMA_TOKEN }}
@@ -184,12 +176,12 @@ jobs:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true && contains(github.event.pull_request.title, '[Milestone')
     uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
     with:
-      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
       bot_name: "your-app-name[bot]"
       bot_id: "YOUR_BOT_ID"
       mode: "milestone-advance"
       pr_number: ${{ github.event.pull_request.number }}
     secrets:
+      api_key: ${{ secrets.LITELLM_API_KEY }}
       github_app_id: ${{ secrets.GH_APP_ID }}
       github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 ```
@@ -207,8 +199,8 @@ jobs:
       !contains(github.event.pull_request.title, '[Milestone') &&
       !endsWith(github.event.sender.login, '[bot]')
     uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-code-review.yml@v1
-    with:
-      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
+    secrets:
+      api_key: ${{ secrets.LITELLM_API_KEY }}
 ```
 
 ```yaml
@@ -221,8 +213,8 @@ jobs:
   decompose:
     if: github.event.label.name == 'pge/status:decompose'
     uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-decompose.yml@v1
-    with:
-      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
+    secrets:
+      api_key: ${{ secrets.LITELLM_API_KEY }}
 ```
 
 ---
@@ -240,7 +232,7 @@ jobs:
   monitor:
     uses: tiankai0114/ai-workflows-hub/.github/workflows/cloudwatch-debug.yml@v1
     with:
-      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-bedrock-role"
+      aws_role: "arn:aws:iam::YOUR_ACCOUNT:role/your-cw-read-role"
       log_group: "/aws/lambda/your-function"
       filter_pattern: "ERROR"
       start_time_offset_minutes: 20
@@ -249,6 +241,7 @@ jobs:
       jira_project_key: "OPS"
       jira_user_email: "ci-bot@your-org.com"
     secrets:
+      api_key: ${{ secrets.LITELLM_API_KEY }}
       jira_api_token: ${{ secrets.JIRA_API_TOKEN }}
 ```
 

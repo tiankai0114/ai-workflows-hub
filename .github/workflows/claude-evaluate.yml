@@ -30,15 +30,6 @@ name: "PGE: Evaluator"
 on:
   workflow_call:
     inputs:
-      aws_role:
-        description: 'IAM Role ARN for Bedrock OIDC'
-        required: true
-        type: string
-      aws_region:
-        description: 'AWS region for Bedrock'
-        required: false
-        type: string
-        default: 'us-west-2'
       bot_id:
         description: 'GitHub App bot user ID'
         required: false
@@ -78,7 +69,6 @@ permissions:
   pull-requests: write
   issues: write
   statuses: read
-  id-token: write
 
 jobs:
   # ─── Human review CHANGES_REQUESTED → add pge/pr:needs-rework ───────────────
@@ -228,8 +218,7 @@ jobs:
           github_token: ${{ steps.app-token.outputs.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
           allowed_bots: ${{ inputs.bot_name }}
-          aws_role: ${{ inputs.aws_role }}
-          aws_region: ${{ inputs.aws_region }}
+          api_key: ${{ secrets.api_key }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
