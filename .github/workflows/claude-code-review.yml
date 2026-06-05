@@ -72,6 +72,19 @@ jobs:
               console.log('requestReviewers skipped:', e.message);
             }
 
+      - name: Check LiteLLM connectivity
+        shell: bash
+        run: |
+          echo "Testing connectivity to LiteLLM proxy..."
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 \
+            "https://us-ailab-api.telenav.com" 2>&1) || STATUS="FAILED"
+          echo "HTTP status: ${STATUS}"
+          if [ "${STATUS}" = "FAILED" ] || [ "${STATUS}" = "000" ]; then
+            echo "::error::Cannot reach LiteLLM proxy from GitHub Actions runner (internal network only)"
+            exit 1
+          fi
+          echo "Reachable (status=${STATUS})"
+
       - name: Review PR
         uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
