@@ -81,6 +81,7 @@ jobs:
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
           max_turns: '30'
+          show_full_output: 'true'
           prompt: |
             You are a **Code Reviewer** for this project.
             This PR was authored by a human developer — review it thoughtfully.
