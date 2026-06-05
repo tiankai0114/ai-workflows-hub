@@ -119,7 +119,7 @@ jobs:
       # ══════════════════════════════════════════════════════════════
       - name: "Iteration 1: Analyze & identify questions"
         id: iter1-analyze
-        uses: ./.github/actions/claude-bedrock
+        uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
@@ -222,7 +222,7 @@ jobs:
 
       - name: "Iteration 1: Answer open questions"
         if: steps.iter1-check.outputs.needs_answers == 'true'
-        uses: ./.github/actions/claude-bedrock
+        uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
@@ -263,7 +263,7 @@ jobs:
       - name: "Iteration 2: Re-analyze with answers"
         if: steps.iter1-check.outputs.needs_answers == 'true'
         id: iter2-analyze
-        uses: ./.github/actions/claude-bedrock
+        uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
@@ -345,7 +345,7 @@ jobs:
 
       - name: "Iteration 2: Answer open questions"
         if: steps.iter2-check.outputs.needs_answers == 'true'
-        uses: ./.github/actions/claude-bedrock
+        uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
@@ -375,7 +375,7 @@ jobs:
         if: |
           steps.iter1-check.outputs.has_plan != 'true' &&
           steps.iter2-check.outputs.has_plan != 'true'
-        uses: ./.github/actions/claude-bedrock
+        uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}

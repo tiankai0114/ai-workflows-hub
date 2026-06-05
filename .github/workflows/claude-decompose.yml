@@ -82,7 +82,7 @@ jobs:
       - name: "Decompose: analyze and create sub-issues"
         if: steps.guard.outputs.skip != 'true'
         id: decompose
-        uses: ./.github/actions/claude-bedrock
+        uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
           aws_role: ${{ inputs.aws_role }}

@@ -223,7 +223,7 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: ./.github/actions/claude-bedrock
+      - uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ steps.app-token.outputs.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
