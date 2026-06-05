@@ -52,7 +52,7 @@ on:
         description: 'Bedrock model ID'
         required: false
         type: string
-        default: 'claude4.6-bedrock'
+        default: 'us.anthropic.claude-sonnet-4-6'
     secrets:
       github_app_id:
         description: 'GitHub App ID'
@@ -64,8 +64,19 @@ on:
         description: 'Figma PAT (optional, for evaluate mode)'
         required: false
 
+      aws_role:
+        description: 'IAM Role ARN for Bedrock access'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+
 permissions:
   contents: read
+  id-token: write
   pull-requests: write
   issues: write
   statuses: read
@@ -218,7 +229,8 @@ jobs:
           github_token: ${{ steps.app-token.outputs.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
           allowed_bots: ${{ inputs.bot_name }}
-          api_key: ${{ secrets.api_key }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}

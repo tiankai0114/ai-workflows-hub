@@ -26,15 +26,21 @@ on:
         description: 'Bedrock model ID'
         required: false
         type: string
-        default: 'claude4.6-bedrock'
+        default: 'us.anthropic.claude-sonnet-4-6'
 
-    secrets:
-      api_key:
-        description: 'LiteLLM API key'
+      aws_role:
+        description: 'IAM Role ARN for Bedrock access'
         required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
 
 permissions:
   contents: read
+  id-token: write
   issues: write
 
 jobs:
@@ -79,7 +85,8 @@ jobs:
         uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
-          api_key: ${{ secrets.api_key }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}

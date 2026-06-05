@@ -30,17 +30,25 @@ on:
         description: 'Bedrock model ID (defaults to claude-sonnet-4-6)'
         required: false
         type: string
-        default: 'claude4.6-bedrock'
+        default: 'us.anthropic.claude-sonnet-4-6'
     secrets:
-      api_key:
-        description: 'LiteLLM API key'
-        required: true
       figma_token:
         description: 'Figma Personal Access Token (optional, enables design context)'
         required: false
 
+      aws_role:
+        description: 'IAM Role ARN for Bedrock access'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+
 permissions:
   contents: read
+  id-token: write
   issues: write
 
 jobs:
@@ -115,7 +123,8 @@ jobs:
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
-          api_key: ${{ secrets.api_key }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
@@ -217,7 +226,8 @@ jobs:
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
-          api_key: ${{ secrets.api_key }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
@@ -257,7 +267,8 @@ jobs:
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
-          api_key: ${{ secrets.api_key }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
@@ -338,7 +349,8 @@ jobs:
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
-          api_key: ${{ secrets.api_key }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
@@ -367,7 +379,8 @@ jobs:
         with:
           github_token: ${{ github.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
-          api_key: ${{ secrets.api_key }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}

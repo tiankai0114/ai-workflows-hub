@@ -1,7 +1,7 @@
-name: 'Claude via LiteLLM'
+name: 'Claude via AWS Bedrock'
 description: >
-  Invoke claude-code-action via LiteLLM proxy (Anthropic-compatible API).
-  No AWS credentials required — authenticates with an API key.
+  Configure AWS OIDC credentials and invoke claude-code-action via Bedrock.
+  Calling job must grant: permissions.id-token: write
 
 inputs:
   prompt:
@@ -10,9 +10,15 @@ inputs:
   github_token:
     description: 'GitHub token for API access'
     required: true
-  api_key:
-    description: 'LiteLLM API key (ANTHROPIC_AUTH_TOKEN)'
+  aws_role:
+    description: >
+      IAM Role ARN to assume via GitHub OIDC for Bedrock access.
+      Example: arn:aws:iam::123456789012:role/github-actions-bedrock-pge
     required: true
+  aws_region:
+    description: 'AWS region for Bedrock'
+    required: false
+    default: 'us-west-2'
   max_turns:
     description: 'Maximum number of agentic turns'
     required: false
@@ -37,7 +43,6 @@ inputs:
     description: >
       GitHub user ID for git config user.email attribution.
       Format: <bot_id>+<bot_name>@users.noreply.github.com
-      Set to your GitHub App bot's user ID for correct commit attribution.
       Defaults to github-actions[bot] (41898282) if not set.
     required: false
     default: ''
@@ -49,21 +54,27 @@ inputs:
     default: ''
   model:
     description: >
-      Model name as configured in LiteLLM proxy.
-      Defaults to claude4.6-bedrock.
+      Bedrock cross-region inference profile ID.
+      Defaults to us.anthropic.claude-sonnet-4-6.
     required: false
-    default: 'claude4.6-bedrock'
+    default: 'us.anthropic.claude-sonnet-4-6'
 
 # ─── Pinned versions ───────────────────────────────────────────────────────────
 # claude-code-action: v1.0.101
-# default model:     claude4.6-bedrock (LiteLLM alias)
-# LiteLLM base URL:  https://us-ailab-api.telenav.com
+# default model:     us.anthropic.claude-sonnet-4-6 (cross-region inference profile)
 # Figma MCP:         Official server at https://mcp.figma.com/v1/sse
 # ──────────────────────────────────────────────────────────────────────────────
 
 runs:
   using: composite
   steps:
+    - name: Configure AWS credentials (Bedrock OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws_role }}
+        aws-region: ${{ inputs.aws_region }}
+        role-duration-seconds: 3600
+
     - name: Write Figma MCP config
       if: inputs.figma_token != ''
       shell: bash
@@ -81,10 +92,9 @@ runs:
       uses: anthropics/claude-code-action@v1.0.101
       env:
         GH_TOKEN: ${{ inputs.github_token }}
-        ANTHROPIC_BASE_URL: "https://us-ailab-api.telenav.com"
         MCP_TIMEOUT: '60000'
       with:
-        anthropic_api_key: ${{ inputs.api_key }}
+        use_bedrock: "true"
         github_token: ${{ inputs.github_token }}
         prompt: ${{ inputs.prompt }}
         allowed_bots: ${{ inputs.allowed_bots }}

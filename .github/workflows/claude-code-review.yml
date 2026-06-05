@@ -31,18 +31,26 @@ on:
         description: 'Bedrock model ID'
         required: false
         type: string
-        default: 'claude4.6-bedrock'
+        default: 'us.anthropic.claude-sonnet-4-6'
 
     secrets:
-      api_key:
-        description: 'LiteLLM API key'
-        required: true
       figma_token:
         description: 'Figma PAT (optional)'
         required: false
 
+      aws_role:
+        description: 'IAM Role ARN for Bedrock access'
+        required: true
+        type: string
+      aws_region:
+        description: 'AWS region for Bedrock'
+        required: false
+        type: string
+        default: 'us-west-2'
+
 permissions:
   contents: read
+  id-token: write
   pull-requests: write
   issues: read
 
@@ -72,24 +80,13 @@ jobs:
               console.log('requestReviewers skipped:', e.message);
             }
 
-      - name: Check LiteLLM connectivity
-        shell: bash
-        run: |
-          echo "Testing connectivity to LiteLLM proxy..."
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 \
-            "https://us-ailab-api.telenav.com" 2>&1) || STATUS="FAILED"
-          echo "HTTP status: ${STATUS}"
-          if [ "${STATUS}" = "FAILED" ] || [ "${STATUS}" = "000" ]; then
-            echo "::error::Cannot reach LiteLLM proxy from GitHub Actions runner (internal network only)"
-            exit 1
-          fi
-          echo "Reachable (status=${STATUS})"
 
       - name: Review PR
         uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
         with:
           github_token: ${{ github.token }}
-          api_key: ${{ secrets.api_key }}
+          aws_role: ${{ inputs.aws_role }}
+          aws_region: ${{ inputs.aws_region }}
           bot_id: ${{ inputs.bot_id }}
           bot_name: ${{ inputs.bot_name }}
           model: ${{ inputs.model }}
