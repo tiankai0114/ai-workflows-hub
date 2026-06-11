@@ -1,58 +1,66 @@
 # ai-workflows-hub
 
-AI 驱动的开发工作流公共库。任何 GitHub repo 通过 Reusable Workflows 引用，零基础设施、零运维。
+A shared library of AI-driven development workflows. Any GitHub repo can reference it via Reusable Workflows — zero infrastructure, zero ops.
 
-AI 模型调用基于 **AWS Bedrock（Claude）**，通过 GitHub OIDC 免密钥 assume IAM Role。
+AI model calls are powered by **AWS Bedrock (Claude)**, authenticated via GitHub OIDC to assume an IAM Role without storing credentials.
 
----
-
-## 包含内容
-
-### 引用型（`uses:` 直接引用）
-
-| 文件 | 类型 | 说明 |
-|------|------|------|
-| `.github/actions/claude-bedrock/` | Composite Action | AWS Bedrock Claude 调用核心（OIDC 认证） |
-| `.github/actions/jira-handler/` | Composite Action | 调用 Jira REST API 创建 Issue |
-| `.github/actions/teams-handler/` | Composite Action | 发送 Teams 通知 |
-| `.github/workflows/claude-plan.yml` | Reusable Workflow | PGE Planner — 分析 Issue，自动问答，生成里程碑计划 |
-| `.github/workflows/claude-implement.yml` | Reusable Workflow | PGE Generator + Rework — 实现代码，开 PR |
-| `.github/workflows/claude-evaluate.yml` | Reusable Workflow | PGE Evaluator + Milestone Advance — 评审 PR，推进里程碑 |
-| `.github/workflows/claude-code-review.yml` | Reusable Workflow | Code Review — 人工 PR 的轻量代码审查 |
-| `.github/workflows/claude-decompose.yml` | Reusable Workflow | Decomposer — 将大 Issue 拆分为带依赖关系的子 Issue |
-| `.github/workflows/cloudwatch-debug.yml` | Reusable Workflow | CloudWatch 日志轮询 → Claude 分析 → Jira/Teams |
-
-### 复制型（从 `templates/` 复制一次）
-
-| 文件 | 说明 |
-|------|------|
-| `templates/labels.yml` | PGE 标签体系，`gh label import` 导入 |
-| `templates/ISSUE_TEMPLATE/` | Issue 模板（prd / bug / change-request） |
-| `templates/CLAUDE.md.template` | CLAUDE.md 骨架 |
-| `templates/cursor-skills/clean-code/SKILL.md` | 跨项目代码质量基线 |
-| `templates/cursor-skills/refactor/SKILL.md` | 跨项目重构协议 |
+**English** · [中文文档](./README.zh-CN.md)
 
 ---
 
-## 接入新 Repo — 完整步骤
+## Contents
 
-### 前提条件
+### Reference-based (use `uses:` to reference directly)
 
-- 目标 repo 已托管在 GitHub
-- 有 AWS 账号，且已创建 Bedrock 可用的 IAM Role（见步骤 2）
+
+| File                                       | Type              | Description                                                        |
+| ------------------------------------------ | ----------------- | ------------------------------------------------------------------ |
+| `.github/actions/claude-bedrock/`          | Composite Action  | Core: invoke AWS Bedrock Claude with OIDC auth                     |
+| `.github/actions/jira-handler/`            | Composite Action  | Create Jira issues via REST API                                    |
+| `.github/actions/teams-handler/`           | Composite Action  | Send Microsoft Teams notifications                                 |
+| `.github/workflows/claude-plan.yml`        | Reusable Workflow | PGE Planner — analyze issue, auto Q&A, generate milestone plan     |
+| `.github/workflows/claude-implement.yml`   | Reusable Workflow | PGE Generator + Rework — implement code, open PR                   |
+| `.github/workflows/claude-evaluate.yml`    | Reusable Workflow | PGE Evaluator + Milestone Advance — review PR, advance milestones  |
+| `.github/workflows/claude-code-review.yml` | Reusable Workflow | Code Review — lightweight review for human-authored PRs            |
+| `.github/workflows/claude-decompose.yml`   | Reusable Workflow | Decomposer — split a large issue into sub-issues with dependencies |
+| `.github/workflows/cloudwatch-debug.yml`   | Reusable Workflow | CloudWatch log polling → Claude analysis → Jira/Teams              |
+
+
+### Template-based (copy once from `templates/`)
+
+
+| File                                          | Description                                  |
+| --------------------------------------------- | -------------------------------------------- |
+| `templates/labels.yml`                        | PGE label set, import with `gh label import` |
+| `templates/ISSUE_TEMPLATE/`                   | Issue templates (prd / bug / change-request) |
+| `templates/CLAUDE.md.template`                | CLAUDE.md scaffold                           |
+| `templates/cursor-skills/clean-code/SKILL.md` | Cross-repo code quality baseline             |
+| `templates/cursor-skills/refactor/SKILL.md`   | Cross-repo refactoring protocol              |
+
 
 ---
 
-### 步骤 1：复制模板文件
+## Onboarding a New Repo — Complete Steps
+
+### Prerequisites
+
+- The target repo is hosted on GitHub
+- You have an AWS account with a Bedrock-enabled IAM Role (see Step 2)
+- `[gh` CLI](https://cli.github.com/) is installed and authenticated locally (used in Steps 1, 5, 7)
+- `jq` is installed locally (required by the `claude-bedrock` action; it will fail immediately if missing)
+
+---
+
+### Step 1: Copy Template Files
 
 ```bash
-# 克隆 library
+# Clone the library
 gh repo clone tiankai0114/ai-workflows-hub /tmp/ai-workflows-hub
 
-# 进入目标 repo 根目录
+# Navigate to your repo root
 cd /path/to/your-repo
 
-# 复制模板
+# Copy templates
 cp /tmp/ai-workflows-hub/templates/labels.yml .github/labels.yml
 cp -r /tmp/ai-workflows-hub/templates/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE
 cp /tmp/ai-workflows-hub/templates/CLAUDE.md.template CLAUDE.md
@@ -61,9 +69,9 @@ cp -r /tmp/ai-workflows-hub/templates/cursor-skills/clean-code .cursor/skills/
 cp -r /tmp/ai-workflows-hub/templates/cursor-skills/refactor .cursor/skills/
 ```
 
-### 步骤 2：配置 AWS IAM Role（Trust Policy）
+### Step 2: Configure AWS IAM Role (Trust Policy)
 
-在 AWS Console 找到用于 Bedrock 的 IAM Role，编辑 **Trust relationships**，加入以下 Statement（替换 `YOUR_ACCOUNT_ID` 和 `YOUR_ORG/YOUR_REPO`）：
+In the AWS Console, find the IAM Role used for Bedrock, edit **Trust relationships**, and add the following Statement (replace `YOUR_ACCOUNT_ID` and `YOUR_ORG/YOUR_REPO`):
 
 ```json
 {
@@ -83,11 +91,11 @@ cp -r /tmp/ai-workflows-hub/templates/cursor-skills/refactor .cursor/skills/
 }
 ```
 
-> **注意：** `sub` 条件必须包含至少 6 个字符前缀再跟通配符（如 `repo:tiankai0114/search-android-demo-app:*`），不能用 `repo:tiankai0114/*:*` 这样的宽泛通配符，AWS 会拒绝。
+> **Note:** The `sub` condition must specify a full repo path (e.g. `repo:tiankai0114/search-android-demo-app:`*). Broad wildcards like `repo:tiankai0114/*:*` will be rejected by AWS.
 >
-> 每新增一个 repo 都要在此 Trust Policy 里加一条 `sub` 条件。
+> Each additional repo requires a new `sub` condition entry in this Trust Policy.
 
-IAM Role 还需要附加以下权限 Policy（允许调用 Bedrock）：
+Also attach the following permission policy to allow Bedrock calls:
 
 ```json
 {
@@ -100,87 +108,89 @@ IAM Role 还需要附加以下权限 Policy（允许调用 Bedrock）：
 }
 ```
 
-记录 Role ARN，格式为：`arn:aws:iam::YOUR_ACCOUNT_ID:role/YOUR_ROLE_NAME`
+Note the Role ARN in the format: `arn:aws:iam::YOUR_ACCOUNT_ID:role/YOUR_ROLE_NAME`
 
 ---
 
-### 步骤 3：创建 GitHub App（用于 Generator 以 bot 身份提交代码）
+### Step 3: Create a GitHub App (for Generator to commit as a bot)
 
-> Code Review 和 Decompose 不需要 GitHub App；Plan、Implement、Evaluate 需要。
+> Code Review, Decompose, and Plan do not require a GitHub App; Implement and Evaluate do.
 
-1. 打开 [github.com/settings/apps/new](https://github.com/settings/apps/new)
-2. 填写：
-   - **App name**：`your-repo-ci`（建议加 repo 名前缀，全局唯一）
-   - **Homepage URL**：`https://github.com/your-org`
-   - **Webhook**：取消勾选 Active
-3. 设置 **Permissions**（Repository permissions）：
-   - Contents: **Read & Write**
-   - Issues: **Read & Write**
-   - Pull requests: **Read & Write**
-4. **Where can this GitHub App be installed**：Only on this account
-5. 点击 **Create GitHub App**
-6. 记录页面顶部的 **App ID**（数字）
-7. 往下滚动，点 **Generate a private key** → 下载 `.pem` 文件
+1. Open [github.com/settings/apps/new](https://github.com/settings/apps/new)
+2. Fill in:
+  - **App name**: `your-repo-ci` (prefix with your repo name; must be globally unique)
+  - **Homepage URL**: `https://github.com/your-org`
+  - **Webhook**: uncheck Active
+3. Set **Permissions** (Repository permissions):
+  - Contents: **Read & Write**
+  - Issues: **Read & Write**
+  - Pull requests: **Read & Write**
+4. **Where can this GitHub App be installed**: Only on this account
+5. Click **Create GitHub App**
+6. Note the **App ID** (number) at the top of the page
+7. Scroll down, click **Generate a private key** → download the `.pem` file
 
-**安装 App 到目标 repo：**
+**Install the App to your target repo:**
 
-1. 左侧菜单点 **Install App**
-2. 点账号旁边的 **Install**
-3. 选择 **Only select repositories** → 选目标 repo → 确认
+1. Click **Install App** in the left sidebar
+2. Click **Install** next to your account
+3. Choose **Only select repositories** → select the target repo → confirm
 
-**查询 bot 的数字 User ID：**
+**Look up the bot's numeric User ID:**
 
 ```bash
-# 把 your-app-name 替换为 App name（小写，空格换连字符）
+# Replace your-app-name with the App name (lowercase, spaces to hyphens)
 curl https://api.github.com/users/your-app-name%5Bbot%5D | grep '"id"'
 ```
 
-或浏览器访问：`https://api.github.com/users/your-app-name[bot]`
+Or visit in your browser: `https://api.github.com/users/your-app-name[bot]`
 
-记录返回的 `"id"` 值（即 `bot_id`）。
-
----
-
-### 步骤 4：在目标 repo 添加 Secrets
-
-打开目标 repo → **Settings → Secrets and variables → Actions → New repository secret**：
-
-| Secret 名 | 值 | 必须 |
-|-----------|-----|------|
-| `GH_APP_ID` | GitHub App 的数字 ID | Plan / Implement / Evaluate |
-| `GH_APP_PRIVATE_KEY` | `.pem` 文件完整内容（含头尾行） | Plan / Implement / Evaluate |
-| `FIGMA_TOKEN` | Figma Personal Access Token | 可选，有 Figma 设计稿时使用 |
+Note the returned `"id"` value (this is the `bot_id`).
 
 ---
 
-### 步骤 5：导入 PGE 标签
+### Step 4: Add Secrets to the Target Repo
+
+Go to target repo → **Settings → Secrets and variables → Actions → New repository secret**:
+
+
+| Secret Name          | Value                                                     | Required For                                      |
+| -------------------- | --------------------------------------------------------- | ------------------------------------------------- |
+| `GH_APP_ID`          | GitHub App numeric ID                                     | Implement / Evaluate                              |
+| `GH_APP_PRIVATE_KEY` | Full `.pem` file contents (including header/footer lines) | Implement / Evaluate                              |
+| `FIGMA_TOKEN`        | Figma Personal Access Token                               | Optional — only when Figma designs are referenced |
+
+
+---
+
+### Step 5: Import PGE Labels
 
 ```bash
 cd /path/to/your-repo
 gh label import .github/labels.yml --repo YOUR_ORG/YOUR_REPO
 ```
 
-> 需要 `gh auth login` 且 token 有 `write:repo` 权限。
+> Requires `gh auth login` with a token that has `write:repo` permission.
 
 ---
 
-### 步骤 6：提交 Issue Templates 到默认分支
+### Step 6: Commit Templates to the Default Branch
 
-Issue Templates 必须在默认分支上才在 GitHub 的 "New Issue" 页面生效：
+Issue Templates only appear on GitHub's "New Issue" page when they are on the default branch:
 
 ```bash
-git add .github/ISSUE_TEMPLATE CLAUDE.md .cursor/
+git add .github/ISSUE_TEMPLATE .github/labels.yml CLAUDE.md .cursor/
 git commit -m "chore: add PGE issue templates, CLAUDE.md and skill files"
-git push origin main   # 或 master，视你的默认分支
+git push origin main   # or master, depending on your default branch
 ```
 
 ---
 
-### 步骤 7：添加触发 Workflow 文件
+### Step 7: Add Trigger Workflow Files
 
-在目标 repo 的 `.github/workflows/` 下创建以下文件，替换 `YOUR_ROLE_ARN`、`YOUR_BOT_NAME`、`YOUR_BOT_ID`：
+Create the following files under `.github/workflows/` in your target repo. Replace `YOUR_ROLE_ARN`, `YOUR_BOT_NAME`, and `YOUR_BOT_ID`:
 
-**`pge-code-review.yml`** — 人工 PR 自动代码审查
+`**pge-code-review.yml**` — Auto code review for human-authored PRs
 
 ```yaml
 name: "Claude: Code Review"
@@ -198,7 +208,7 @@ jobs:
       aws_role: "YOUR_ROLE_ARN"
 ```
 
-**`pge-decompose.yml`** — 将大 Issue 拆分为子 Issue
+`**pge-decompose.yml**` — Split a large issue into sub-issues
 
 ```yaml
 name: "Claude: Decompose"
@@ -213,7 +223,7 @@ jobs:
       aws_role: "YOUR_ROLE_ARN"
 ```
 
-**`pge-plan.yml`** — 分析 Issue，生成实现计划
+`**pge-plan.yml**` — Analyze issue, generate implementation plan
 
 ```yaml
 name: "Claude: Planner"
@@ -232,7 +242,7 @@ jobs:
       figma_token: ${{ secrets.FIGMA_TOKEN }}
 ```
 
-**`pge-implement.yml`** — 实现代码 + Rework
+`**pge-implement.yml**` — Implement code + Rework
 
 ```yaml
 name: "Claude: Generator"
@@ -253,13 +263,16 @@ jobs:
       bot_name: "YOUR_BOT_NAME[bot]"
       mode: ${{ (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework') && 'rework' || 'implement' }}
       pr_number: ${{ github.event.pull_request.number || '' }}
+      # evaluator_workflow_name defaults to "Claude: Evaluator".
+      # If you customized the name: field in pge-evaluate.yml, update this value to match.
+      # evaluator_workflow_name: "Claude: Evaluator"
     secrets:
       github_app_id: ${{ secrets.GH_APP_ID }}
       github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       figma_token: ${{ secrets.FIGMA_TOKEN }}
 ```
 
-**`pge-evaluate.yml`** — PR 评审 + 里程碑推进
+`**pge-evaluate.yml**` — PR review + milestone advancement
 
 ```yaml
 name: "Claude: Evaluator"
@@ -322,35 +335,48 @@ jobs:
       github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 ```
 
-把这些文件 commit 并 push 到默认分支即可生效。
+Commit and push these files to the default branch to activate the workflows.
 
 ---
 
-## 完整 PGE 工作流
+## Full PGE Workflow
 
-```
-创建 Issue（使用 Issue Template）
-    ↓
-加标签 pge/status:decompose（可选）
-    → Claude 自动拆分为带依赖关系的子 Issue
-    ↓
-给子 Issue 加标签 pge/status:ready
-    → Claude Planner 扫描代码库，自动问答（最多 3 轮），输出实现计划
-    ↓
-确认计划后加标签 pge/status:implement
-    → Claude Generator 写代码，以 bot 身份开 PR
-    ↓
-PR 自动触发 Evaluator
-    → build + lint + test + 代码审查
-    → 通过：打 pge/pr:approved，推进下一个 Milestone
-    → 不通过：打 pge/pr:needs-rework，触发 Generator 自动修复（最多 5 轮）
-    ↓
-人工 review 并合并 PR
+```mermaid
+flowchart TD
+    A["📝 Create Issue\n(using Issue Template)"]
+
+    A -->|"Add label pge/status:decompose (optional)"| B["🤖 Claude Decomposer\nAuto-splits into sub-issues\nwith dependency graph"]
+    B --> C(["Sub-Issues"])
+    A -->|"Add label pge/status:ready directly"| D
+    C -->|"Add label pge/status:ready"| D
+
+    D["🧠 Claude Planner\nScans codebase · Auto Q&A (≤ 3 rounds)\nOutputs milestone plan"]
+
+    D -->|"Confirm plan, then\nadd label pge/status:implement"| E["⚙️ Claude Generator\nWrites code, opens PR as bot"]
+
+    E --> F["🔍 Claude Evaluator\nbuild + lint + test + code review"]
+
+    F -->|"Fail\npge/pr:needs-rework"| G["🔄 Generator auto-fix\n(≤ 5 rounds)"]
+    G --> F
+
+    F -->|"Pass\npge/pr:approved"| H{"All Milestones\ncomplete?"}
+    H -->|"No, next milestone"| E
+    H -->|"Yes"| I["👤 Human Review & Merge PR"]
+
+    style A fill:#ddf4ff,stroke:#54aeff,color:#0550ae
+    style B fill:#fff8c5,stroke:#d4a72c,color:#633c01
+    style C fill:#fff8c5,stroke:#d4a72c,color:#633c01
+    style D fill:#ddf4ff,stroke:#54aeff,color:#0550ae
+    style E fill:#dafbe1,stroke:#2da44e,color:#116329
+    style F fill:#dafbe1,stroke:#2da44e,color:#116329
+    style G fill:#fff0f0,stroke:#ff8182,color:#a40000
+    style H fill:#f6f8fa,stroke:#8c959f,color:#24292f
+    style I fill:#ddf4ff,stroke:#54aeff,color:#0550ae
 ```
 
 ---
 
-## CloudWatch 日志监控接入（可选）
+## CloudWatch Log Monitoring (Optional)
 
 ```yaml
 # .github/workflows/cloudwatch-monitor.yml
@@ -377,28 +403,31 @@ jobs:
 
 ---
 
-## 版本管理
+## Versioning
 
-使用 `@v1` 引用浮动稳定版。主分支持续更新，建议生产环境固定到具体 tag。
+Use `@v1` to reference the floating stable version. The main branch is continuously updated; production environments should pin to a specific tag.
 
 ```bash
-# 发布新版本
+# Release a new version
 git tag v1.x.x && git push origin v1.x.x
 
-# 移动浮动 tag（v1 始终指向最新稳定版）
+# Move the floating tag (v1 always points to latest stable)
 git tag -f v1 && git push origin v1 --force
 ```
 
 ---
 
-## 参考：demo repo 实际配置值
+## Reference: Demo Repo Configuration
 
-以 `tiankai0114/search-android-demo-app` 为例（实际值保存在 repo secrets 中，不在此公开）：
+Using `tiankai0114/search-android-demo-app` as an example (actual values are stored in repo secrets and not published here):
 
-| 参数 | 示例格式 |
-|------|----|
-| `aws_role` | `arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>` |
-| `bot_name` | `your-app-name[bot]` |
-| `bot_id` | 通过 `https://api.github.com/users/your-app-name[bot]` 查询 `id` 字段 |
-| GitHub App ID（`GH_APP_ID`） | GitHub App 创建后页面顶部显示的数字 |
-| App name | 创建 GitHub App 时填写的名称 |
+
+| Parameter                   | Example Format                                                          |
+| --------------------------- | ----------------------------------------------------------------------- |
+| `aws_role`                  | `arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>`                            |
+| `bot_name`                  | `your-app-name[bot]`                                                    |
+| `bot_id`                    | Look up `id` field at `https://api.github.com/users/your-app-name[bot]` |
+| GitHub App ID (`GH_APP_ID`) | The number shown at the top of the GitHub App page after creation       |
+| App name                    | The name you entered when creating the GitHub App                       |
+
+
