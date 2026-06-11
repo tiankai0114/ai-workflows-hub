@@ -8,35 +8,70 @@ AI model calls are powered by **AWS Bedrock (Claude)**, authenticated via GitHub
 
 ---
 
+## How It Works
+
+Label an Issue — Claude plans, implements, and reviews the code automatically.
+
+```mermaid
+flowchart TD
+    A["📝 Create Issue\n(using Issue Template)"]
+
+    A -->|"Add label pge/status:decompose (optional)"| B["🤖 Claude Decomposer\nAuto-splits into sub-issues\nwith dependency graph"]
+    B --> C(["Sub-Issues"])
+    A -->|"Add label pge/status:ready directly"| D
+    C -->|"Add label pge/status:ready"| D
+
+    D["🧠 Claude Planner\nScans codebase · Auto Q&A (≤ 3 rounds)\nOutputs milestone plan"]
+
+    D -->|"Confirm plan, then\nadd label pge/status:implement"| E["⚙️ Claude Generator\nWrites code, opens PR as bot"]
+
+    E --> F["🔍 Claude Evaluator\nbuild + lint + test + code review"]
+
+    F -->|"Fail\npge/pr:needs-rework"| G["🔄 Generator auto-fix\n(≤ 5 rounds)"]
+    G --> F
+
+    F -->|"Pass\npge/pr:approved"| H{"All Milestones\ncomplete?"}
+    H -->|"No, next milestone"| E
+    H -->|"Yes"| I["👤 Human Review & Merge PR"]
+
+    style A fill:#ddf4ff,stroke:#54aeff,color:#0550ae
+    style B fill:#fff8c5,stroke:#d4a72c,color:#633c01
+    style C fill:#fff8c5,stroke:#d4a72c,color:#633c01
+    style D fill:#ddf4ff,stroke:#54aeff,color:#0550ae
+    style E fill:#dafbe1,stroke:#2da44e,color:#116329
+    style F fill:#dafbe1,stroke:#2da44e,color:#116329
+    style G fill:#fff0f0,stroke:#ff8182,color:#a40000
+    style H fill:#f6f8fa,stroke:#8c959f,color:#24292f
+    style I fill:#ddf4ff,stroke:#54aeff,color:#0550ae
+```
+
+---
+
 ## Contents
 
 ### Reference-based (use `uses:` to reference directly)
 
-
-| File                                       | Type              | Description                                                        |
-| ------------------------------------------ | ----------------- | ------------------------------------------------------------------ |
-| `.github/actions/claude-bedrock/`          | Composite Action  | Core: invoke AWS Bedrock Claude with OIDC auth                     |
-| `.github/actions/jira-handler/`            | Composite Action  | Create Jira issues via REST API                                    |
-| `.github/actions/teams-handler/`           | Composite Action  | Send Microsoft Teams notifications                                 |
-| `.github/workflows/claude-plan.yml`        | Reusable Workflow | PGE Planner — analyze issue, auto Q&A, generate milestone plan     |
-| `.github/workflows/claude-implement.yml`   | Reusable Workflow | PGE Generator + Rework — implement code, open PR                   |
-| `.github/workflows/claude-evaluate.yml`    | Reusable Workflow | PGE Evaluator + Milestone Advance — review PR, advance milestones  |
-| `.github/workflows/claude-code-review.yml` | Reusable Workflow | Code Review — lightweight review for human-authored PRs            |
-| `.github/workflows/claude-decompose.yml`   | Reusable Workflow | Decomposer — split a large issue into sub-issues with dependencies |
-| `.github/workflows/cloudwatch-debug.yml`   | Reusable Workflow | CloudWatch log polling → Claude analysis → Jira/Teams              |
-
+| File | Type | Description |
+|------|------|-------------|
+| `.github/actions/claude-bedrock/` | Composite Action | Core: invoke AWS Bedrock Claude with OIDC auth |
+| `.github/actions/jira-handler/` | Composite Action | Create Jira issues via REST API |
+| `.github/actions/teams-handler/` | Composite Action | Send Microsoft Teams notifications |
+| `.github/workflows/claude-plan.yml` | Reusable Workflow | PGE Planner — analyze issue, auto Q&A, generate milestone plan |
+| `.github/workflows/claude-implement.yml` | Reusable Workflow | PGE Generator + Rework — implement code, open PR |
+| `.github/workflows/claude-evaluate.yml` | Reusable Workflow | PGE Evaluator + Milestone Advance — review PR, advance milestones |
+| `.github/workflows/claude-code-review.yml` | Reusable Workflow | Code Review — lightweight review for human-authored PRs |
+| `.github/workflows/claude-decompose.yml` | Reusable Workflow | Decomposer — split a large issue into sub-issues with dependencies |
+| `.github/workflows/cloudwatch-debug.yml` | Reusable Workflow | CloudWatch log polling → Claude analysis → Jira/Teams |
 
 ### Template-based (copy once from `templates/`)
 
-
-| File                                          | Description                                  |
-| --------------------------------------------- | -------------------------------------------- |
-| `templates/labels.yml`                        | PGE label set, import with `gh label import` |
-| `templates/ISSUE_TEMPLATE/`                   | Issue templates (prd / bug / change-request) |
-| `templates/CLAUDE.md.template`                | CLAUDE.md scaffold                           |
-| `templates/cursor-skills/clean-code/SKILL.md` | Cross-repo code quality baseline             |
-| `templates/cursor-skills/refactor/SKILL.md`   | Cross-repo refactoring protocol              |
-
+| File | Description |
+|------|-------------|
+| `templates/labels.yml` | PGE label set, import with `gh label import` |
+| `templates/ISSUE_TEMPLATE/` | Issue templates (prd / bug / change-request) |
+| `templates/CLAUDE.md.template` | CLAUDE.md scaffold |
+| `templates/cursor-skills/clean-code/SKILL.md` | Cross-repo code quality baseline |
+| `templates/cursor-skills/refactor/SKILL.md` | Cross-repo refactoring protocol |
 
 ---
 
@@ -46,7 +81,7 @@ AI model calls are powered by **AWS Bedrock (Claude)**, authenticated via GitHub
 
 - The target repo is hosted on GitHub
 - You have an AWS account with a Bedrock-enabled IAM Role (see Step 2)
-- `[gh` CLI](https://cli.github.com/) is installed and authenticated locally (used in Steps 1, 5, 7)
+- [`gh` CLI](https://cli.github.com/) is installed and authenticated locally (used in Steps 1, 5, 7)
 - `jq` is installed locally (required by the `claude-bedrock` action; it will fail immediately if missing)
 
 ---
@@ -91,7 +126,7 @@ In the AWS Console, find the IAM Role used for Bedrock, edit **Trust relationshi
 }
 ```
 
-> **Note:** The `sub` condition must specify a full repo path (e.g. `repo:tiankai0114/search-android-demo-app:`*). Broad wildcards like `repo:tiankai0114/*:*` will be rejected by AWS.
+> **Note:** The `sub` condition must specify a full repo path (e.g. `repo:tiankai0114/search-android-demo-app:*`). Broad wildcards like `repo:tiankai0114/*:*` will be rejected by AWS.
 >
 > Each additional repo requires a new `sub` condition entry in this Trust Policy.
 
@@ -118,13 +153,13 @@ Note the Role ARN in the format: `arn:aws:iam::YOUR_ACCOUNT_ID:role/YOUR_ROLE_NA
 
 1. Open [github.com/settings/apps/new](https://github.com/settings/apps/new)
 2. Fill in:
-  - **App name**: `your-repo-ci` (prefix with your repo name; must be globally unique)
-  - **Homepage URL**: `https://github.com/your-org`
-  - **Webhook**: uncheck Active
+   - **App name**: `your-repo-ci` (prefix with your repo name; must be globally unique)
+   - **Homepage URL**: `https://github.com/your-org`
+   - **Webhook**: uncheck Active
 3. Set **Permissions** (Repository permissions):
-  - Contents: **Read & Write**
-  - Issues: **Read & Write**
-  - Pull requests: **Read & Write**
+   - Contents: **Read & Write**
+   - Issues: **Read & Write**
+   - Pull requests: **Read & Write**
 4. **Where can this GitHub App be installed**: Only on this account
 5. Click **Create GitHub App**
 6. Note the **App ID** (number) at the top of the page
@@ -153,13 +188,11 @@ Note the returned `"id"` value (this is the `bot_id`).
 
 Go to target repo → **Settings → Secrets and variables → Actions → New repository secret**:
 
-
-| Secret Name          | Value                                                     | Required For                                      |
-| -------------------- | --------------------------------------------------------- | ------------------------------------------------- |
-| `GH_APP_ID`          | GitHub App numeric ID                                     | Implement / Evaluate                              |
-| `GH_APP_PRIVATE_KEY` | Full `.pem` file contents (including header/footer lines) | Implement / Evaluate                              |
-| `FIGMA_TOKEN`        | Figma Personal Access Token                               | Optional — only when Figma designs are referenced |
-
+| Secret Name | Value | Required For |
+|-------------|-------|--------------|
+| `GH_APP_ID` | GitHub App numeric ID | Implement / Evaluate |
+| `GH_APP_PRIVATE_KEY` | Full `.pem` file contents (including header/footer lines) | Implement / Evaluate |
+| `FIGMA_TOKEN` | Figma Personal Access Token | Optional — only when Figma designs are referenced |
 
 ---
 
@@ -190,7 +223,7 @@ git push origin main   # or master, depending on your default branch
 
 Create the following files under `.github/workflows/` in your target repo. Replace `YOUR_ROLE_ARN`, `YOUR_BOT_NAME`, and `YOUR_BOT_ID`:
 
-`**pge-code-review.yml**` — Auto code review for human-authored PRs
+**`pge-code-review.yml`** — Auto code review for human-authored PRs
 
 ```yaml
 name: "Claude: Code Review"
@@ -208,7 +241,7 @@ jobs:
       aws_role: "YOUR_ROLE_ARN"
 ```
 
-`**pge-decompose.yml**` — Split a large issue into sub-issues
+**`pge-decompose.yml`** — Split a large issue into sub-issues
 
 ```yaml
 name: "Claude: Decompose"
@@ -223,7 +256,7 @@ jobs:
       aws_role: "YOUR_ROLE_ARN"
 ```
 
-`**pge-plan.yml**` — Analyze issue, generate implementation plan
+**`pge-plan.yml`** — Analyze issue, generate implementation plan
 
 ```yaml
 name: "Claude: Planner"
@@ -242,7 +275,7 @@ jobs:
       figma_token: ${{ secrets.FIGMA_TOKEN }}
 ```
 
-`**pge-implement.yml**` — Implement code + Rework
+**`pge-implement.yml`** — Implement code + Rework
 
 ```yaml
 name: "Claude: Generator"
@@ -272,7 +305,7 @@ jobs:
       figma_token: ${{ secrets.FIGMA_TOKEN }}
 ```
 
-`**pge-evaluate.yml**` — PR review + milestone advancement
+**`pge-evaluate.yml`** — PR review + milestone advancement
 
 ```yaml
 name: "Claude: Evaluator"
@@ -339,43 +372,6 @@ Commit and push these files to the default branch to activate the workflows.
 
 ---
 
-## Full PGE Workflow
-
-```mermaid
-flowchart TD
-    A["📝 Create Issue\n(using Issue Template)"]
-
-    A -->|"Add label pge/status:decompose (optional)"| B["🤖 Claude Decomposer\nAuto-splits into sub-issues\nwith dependency graph"]
-    B --> C(["Sub-Issues"])
-    A -->|"Add label pge/status:ready directly"| D
-    C -->|"Add label pge/status:ready"| D
-
-    D["🧠 Claude Planner\nScans codebase · Auto Q&A (≤ 3 rounds)\nOutputs milestone plan"]
-
-    D -->|"Confirm plan, then\nadd label pge/status:implement"| E["⚙️ Claude Generator\nWrites code, opens PR as bot"]
-
-    E --> F["🔍 Claude Evaluator\nbuild + lint + test + code review"]
-
-    F -->|"Fail\npge/pr:needs-rework"| G["🔄 Generator auto-fix\n(≤ 5 rounds)"]
-    G --> F
-
-    F -->|"Pass\npge/pr:approved"| H{"All Milestones\ncomplete?"}
-    H -->|"No, next milestone"| E
-    H -->|"Yes"| I["👤 Human Review & Merge PR"]
-
-    style A fill:#ddf4ff,stroke:#54aeff,color:#0550ae
-    style B fill:#fff8c5,stroke:#d4a72c,color:#633c01
-    style C fill:#fff8c5,stroke:#d4a72c,color:#633c01
-    style D fill:#ddf4ff,stroke:#54aeff,color:#0550ae
-    style E fill:#dafbe1,stroke:#2da44e,color:#116329
-    style F fill:#dafbe1,stroke:#2da44e,color:#116329
-    style G fill:#fff0f0,stroke:#ff8182,color:#a40000
-    style H fill:#f6f8fa,stroke:#8c959f,color:#24292f
-    style I fill:#ddf4ff,stroke:#54aeff,color:#0550ae
-```
-
----
-
 ## CloudWatch Log Monitoring (Optional)
 
 ```yaml
@@ -421,13 +417,10 @@ git tag -f v1 && git push origin v1 --force
 
 Using `tiankai0114/search-android-demo-app` as an example (actual values are stored in repo secrets and not published here):
 
-
-| Parameter                   | Example Format                                                          |
-| --------------------------- | ----------------------------------------------------------------------- |
-| `aws_role`                  | `arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>`                            |
-| `bot_name`                  | `your-app-name[bot]`                                                    |
-| `bot_id`                    | Look up `id` field at `https://api.github.com/users/your-app-name[bot]` |
-| GitHub App ID (`GH_APP_ID`) | The number shown at the top of the GitHub App page after creation       |
-| App name                    | The name you entered when creating the GitHub App                       |
-
-
+| Parameter | Example Format |
+|-----------|----------------|
+| `aws_role` | `arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>` |
+| `bot_name` | `your-app-name[bot]` |
+| `bot_id` | Look up `id` field at `https://api.github.com/users/your-app-name[bot]` |
+| GitHub App ID (`GH_APP_ID`) | The number shown at the top of the GitHub App page after creation |
+| App name | The name you entered when creating the GitHub App |

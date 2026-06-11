@@ -8,6 +8,45 @@ AI 模型调用基于 **AWS Bedrock（Claude）**，通过 GitHub OIDC 免密钥
 
 ---
 
+## 工作原理
+
+给 Issue 加标签，Claude 自动完成规划、写代码、评审的全流程。
+
+```mermaid
+flowchart TD
+    A["📝 创建 Issue\n（使用 Issue Template）"]
+
+    A -->|"加标签 pge/status:decompose（可选）"| B["🤖 Claude Decomposer\n自动拆分为带依赖关系的子 Issue"]
+    B --> C(["子 Issue"])
+    A -->|"直接加标签 pge/status:ready"| D
+    C -->|"加标签 pge/status:ready"| D
+
+    D["🧠 Claude Planner\n扫描代码库 · 自动问答（≤ 3 轮）\n输出里程碑计划"]
+
+    D -->|"确认计划后\n加标签 pge/status:implement"| E["⚙️ Claude Generator\n写代码，以 bot 身份开 PR"]
+
+    E --> F["🔍 Claude Evaluator\nbuild + lint + test + 代码审查"]
+
+    F -->|"不通过\npge/pr:needs-rework"| G["🔄 Generator 自动修复\n（≤ 5 轮）"]
+    G --> F
+
+    F -->|"通过\npge/pr:approved"| H{"所有 Milestone\n已完成？"}
+    H -->|"否，继续下一个"| E
+    H -->|"是"| I["👤 人工 Review & Merge PR"]
+
+    style A fill:#ddf4ff,stroke:#54aeff,color:#0550ae
+    style B fill:#fff8c5,stroke:#d4a72c,color:#633c01
+    style C fill:#fff8c5,stroke:#d4a72c,color:#633c01
+    style D fill:#ddf4ff,stroke:#54aeff,color:#0550ae
+    style E fill:#dafbe1,stroke:#2da44e,color:#116329
+    style F fill:#dafbe1,stroke:#2da44e,color:#116329
+    style G fill:#fff0f0,stroke:#ff8182,color:#a40000
+    style H fill:#f6f8fa,stroke:#8c959f,color:#24292f
+    style I fill:#ddf4ff,stroke:#54aeff,color:#0550ae
+```
+
+---
+
 ## 包含内容
 
 ### 引用型（`uses:` 直接引用）
@@ -330,43 +369,6 @@ jobs:
 ```
 
 把这些文件 commit 并 push 到默认分支即可生效。
-
----
-
-## 完整 PGE 工作流
-
-```mermaid
-flowchart TD
-    A["📝 创建 Issue\n（使用 Issue Template）"]
-
-    A -->|"加标签 pge/status:decompose（可选）"| B["🤖 Claude Decomposer\n自动拆分为带依赖关系的子 Issue"]
-    B --> C(["子 Issue"])
-    A -->|"直接加标签 pge/status:ready"| D
-    C -->|"加标签 pge/status:ready"| D
-
-    D["🧠 Claude Planner\n扫描代码库 · 自动问答（≤ 3 轮）\n输出里程碑计划"]
-
-    D -->|"确认计划后\n加标签 pge/status:implement"| E["⚙️ Claude Generator\n写代码，以 bot 身份开 PR"]
-
-    E --> F["🔍 Claude Evaluator\nbuild + lint + test + 代码审查"]
-
-    F -->|"不通过\npge/pr:needs-rework"| G["🔄 Generator 自动修复\n（≤ 5 轮）"]
-    G --> F
-
-    F -->|"通过\npge/pr:approved"| H{"所有 Milestone\n已完成？"}
-    H -->|"否，继续下一个"| E
-    H -->|"是"| I["👤 人工 Review & Merge PR"]
-
-    style A fill:#ddf4ff,stroke:#54aeff,color:#0550ae
-    style B fill:#fff8c5,stroke:#d4a72c,color:#633c01
-    style C fill:#fff8c5,stroke:#d4a72c,color:#633c01
-    style D fill:#ddf4ff,stroke:#54aeff,color:#0550ae
-    style E fill:#dafbe1,stroke:#2da44e,color:#116329
-    style F fill:#dafbe1,stroke:#2da44e,color:#116329
-    style G fill:#fff0f0,stroke:#ff8182,color:#a40000
-    style H fill:#f6f8fa,stroke:#8c959f,color:#24292f
-    style I fill:#ddf4ff,stroke:#54aeff,color:#0550ae
-```
 
 ---
 
