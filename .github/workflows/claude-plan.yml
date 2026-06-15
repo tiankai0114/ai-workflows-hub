@@ -40,6 +40,15 @@ on:
         required: false
         type: string
         default: 'us-west-2'
+      project_context:
+        description: >
+          Optional project-specific context prepended to the planning prompt.
+          Use this to describe the tech stack, architecture pattern, or constraints
+          the Planner should be aware of when analyzing the issue and generating the plan.
+          If omitted, Claude reads CLAUDE.md for project context.
+        required: false
+        type: string
+        default: ''
     secrets:
       figma_token:
         description: 'Figma Personal Access Token (optional, enables design context)'
@@ -130,7 +139,7 @@ jobs:
           model: ${{ inputs.model }}
           max_turns: '100'
           prompt: |
-            You are the **Planner** for this project.
+            ${{ inputs.project_context != '' && format('## Project Context (provided by repo owner)\n\n{0}\n\n---\n\n', inputs.project_context) || '' }}You are the **Planner** for this project.
 
             ## Reading the issue
 
@@ -143,11 +152,16 @@ jobs:
             ${{ steps.history.outputs.has_history == 'true' && 'This issue has been planned before (re-trigger). Read /tmp/planner-history.md — it contains the previous plan and any human feedback posted after it. You MUST produce a NEW plan that incorporates the feedback. Do NOT reuse the old plan as-is.' || '' }}
 
             Your task for THIS step:
-            1. Read CLAUDE.md to understand the project structure and available SKILL files
-            2. **Always read the cross-repo baseline skills** before anything else:
-               - `.cursor/skills/clean-code/SKILL.md`
-               - `.cursor/skills/refactor/SKILL.md`
-            3. Based on the issue content AND all comments, identify affected domains and read those SKILL files
+            1. If `CLAUDE.md` exists at the repo root, read it to understand the project structure
+               and available SKILL files. If it does not exist, infer the project structure from
+               the issue content and directory listing, then proceed.
+            2. If `.cursor/skills/` exists, read the relevant baseline skills before planning:
+               - `.cursor/skills/clean-code/SKILL.md` (if it exists)
+               - `.cursor/skills/refactor/SKILL.md` (if it exists)
+               If the directory does not exist, skip this step entirely — do NOT waste a turn
+               attempting to read non-existent files.
+            3. Based on the issue content AND all comments, identify affected domains and read
+               those SKILL files if they exist.
             4. Perform impact analysis: which sub-projects, directories, and components are affected
             5. Identify any **open questions** — raise a question for ANY ambiguity, design decision,
                or feature mentioned in the issue that is NOT explicitly required by the acceptance criteria.

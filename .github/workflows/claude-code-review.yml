@@ -42,6 +42,16 @@ on:
         required: false
         type: string
         default: 'us-west-2'
+      project_context:
+        description: >
+          Optional project-specific context prepended to the review prompt.
+          Use this to describe the tech stack, architecture pattern, or special
+          review focus areas (e.g. "Kotlin Android project, MVVM architecture,
+          pay attention to coroutine scope handling").
+          If omitted, Claude reads CLAUDE.md for project context.
+        required: false
+        type: string
+        default: ''
 
     secrets:
       figma_token:
@@ -93,7 +103,7 @@ jobs:
           max_turns: '30'
           show_full_output: 'true'
           prompt: |
-            You are a **Code Reviewer** for this project.
+            ${{ inputs.project_context != '' && format('## Project Context (provided by repo owner)\n\n{0}\n\n---\n\n', inputs.project_context) || '' }}You are a **Code Reviewer** for this project.
             This PR was authored by a human developer — review it thoughtfully.
 
             ## SCOPE LOCK (READ FIRST — VIOLATING THIS IS A BUG)
@@ -116,9 +126,11 @@ jobs:
             ## Your task
 
             **Step 1 — Gather project context (optional, skip if files do not exist)**
-            - If `CLAUDE.md` exists at the repo root, read it to understand project structure and conventions.
+            - If `CLAUDE.md` exists at the repo root, read it to understand the tech stack,
+              architecture pattern, and project conventions. Use this to calibrate your review criteria.
             - If `.cursor/skills/` exists, read any SKILL files relevant to the changed code.
-            - If neither file exists, skip this step entirely and proceed to Step 2.
+            - If neither file exists, infer the tech stack from the PR diff and apply general
+              best practices appropriate to the languages and frameworks you observe.
             - Do NOT search for these files in subdirectories or retry if they return 404.
 
             **Step 2 — Read the PR diff**
@@ -127,8 +139,9 @@ jobs:
             **Step 3 — Review against these dimensions**
 
             **A. Architecture Compliance**
-            - Layer boundaries respected (server/client separation, controller→service→DAO)?
-            - Naming conventions consistent with the project?
+            - Layer boundaries respected per the architecture described in CLAUDE.md or Project Context above?
+              (If no architecture is documented, skip the layer boundary check.)
+            - Naming conventions consistent with the patterns observed in the existing codebase?
 
             **B. Code Quality**
             - Validation at all external boundaries?
