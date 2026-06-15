@@ -66,6 +66,16 @@ on:
         required: false
         type: string
         default: 'us-west-2'
+      project_context:
+        description: >
+          Optional project-specific context prepended to the generator prompt.
+          Use this to describe the tech stack, coding conventions, or constraints
+          the Generator should follow when writing code (e.g. "Kotlin Android,
+          target SDK 35, use Hilt for DI, no third-party HTTP libraries").
+          If omitted, Claude reads CLAUDE.md for project context.
+        required: false
+        type: string
+        default: ''
     secrets:
       github_app_id:
         description: 'GitHub App ID for creating tokens'
@@ -209,7 +219,7 @@ jobs:
           show_full_output: 'true'
           max_turns: '200'
           prompt: |
-            You are the **Generator** for this project.
+            ${{ inputs.project_context != '' && format('## Project Context (provided by repo owner)\n\n{0}\n\n---\n\n', inputs.project_context) || '' }}You are the **Generator** for this project.
 
             Read the issue that triggered this workflow. It contains a PRD and a Planner analysis
             with milestones and Sprint Contracts (acceptance criteria per milestone).
@@ -218,21 +228,24 @@ jobs:
             ${{ steps.milestone.outputs.prev_branch != '' && format('## Pipeline mode: branching from `{0}` (previous milestone)', steps.milestone.outputs.prev_branch) || '' }}
 
             Your task:
-            1. Read CLAUDE.md and all relevant SKILL files listed in the Planner analysis
-            2. **Always read these baseline skills before writing any code:**
-               - `.cursor/skills/clean-code/SKILL.md` (cross-repo quality baseline)
-               - `.cursor/skills/refactor/SKILL.md` (refactor protocol)
-               - The touched sub-project's `development-standard/SKILL.md`
+            1. If `CLAUDE.md` exists at the repo root, read it for architecture rules and build commands.
+               If it does not exist, infer from the project structure and proceed.
+            2. If `.cursor/skills/` exists, read the relevant baseline skills before writing any code:
+               - `.cursor/skills/clean-code/SKILL.md` (if it exists)
+               - `.cursor/skills/refactor/SKILL.md` (if it exists)
+               - The touched sub-project's `development-standard/SKILL.md` (if it exists)
+               If the directory does not exist, skip this step — do NOT waste turns reading
+               non-existent files.
             3. Find the **latest** Planner comment (contains `<!-- MILESTONES_START -->`)
             4. Locate **Milestone ${{ steps.milestone.outputs.number }}** and its Sprint Contract
                (between `<!-- SPRINT_CONTRACT_START -->` and `<!-- SPRINT_CONTRACT_END -->`)
             5. Implement ONLY the changes for this milestone
-            6. Follow coding standards from baseline skills AND the touched sub-project's
-               `development-standard/SKILL.md`
-            7. Follow architecture rules from CLAUDE.md
-            8. Run verification on affected sub-projects — check CLAUDE.md for the build and
-               test commands specific to this project
-            9. Update SKILL files to reflect your changes
+            6. Follow coding standards from SKILL files (if they exist) or from CLAUDE.md conventions
+            7. Follow architecture rules from CLAUDE.md (if it exists)
+            8. Run verification on affected sub-projects — if CLAUDE.md specifies build/test commands,
+               use them; otherwise use the standard build tool for the detected language/framework
+            9. If `.cursor/skills/` directory exists, update the relevant SKILL files to reflect
+               any new patterns or behaviors introduced by your changes. If it does not exist, skip.
             10. Create a PR with:
                 - Title: `[Milestone ${{ steps.milestone.outputs.number }}/${{ steps.milestone.outputs.total }}] {feature title} (#${{ github.event.issue.number }})`
                 - Body with: summary, this milestone's Sprint Contract checklist, skills updated
@@ -413,7 +426,7 @@ jobs:
           show_full_output: 'true'
           max_turns: '100'
           prompt: |
-            You are the **Generator (Rework Mode)** for this project.
+            ${{ inputs.project_context != '' && format('## Project Context (provided by repo owner)\n\n{0}\n\n---\n\n', inputs.project_context) || '' }}You are the **Generator (Rework Mode)** for this project.
             This is rework iteration #${{ steps.rework-check.outputs.count }}.
 
             The Evaluator reviewed this PR and requested changes.
@@ -449,9 +462,12 @@ jobs:
 
             ### Step 3 — Read baselines and SKILL files
 
-            Read CLAUDE.md and all relevant SKILL files referenced in the feedback.
-            Always re-read: `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
-            and the touched sub-project's `development-standard/SKILL.md`.
+            If `CLAUDE.md` exists, read it and any SKILL files referenced in the Evaluator feedback.
+            If `.cursor/skills/` exists, re-read the relevant files:
+            `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
+            and the touched sub-project's `development-standard/SKILL.md` (only if they exist).
+            If none of these files exist, skip this step and apply general best practices
+            appropriate to the language/framework detected from the codebase.
 
             ### Step 4 — Fix ALL issues from the checklist
 
@@ -467,10 +483,11 @@ jobs:
 
             Run the build and test commands from CLAUDE.md for affected sub-projects.
 
-            ### Step 7 — SKILL update obligation
+            ### Step 7 — SKILL update obligation (only if `.cursor/skills/` exists)
 
-            Apply the same SKILL-update obligation as the original Generator. Update SKILL files
-            for any new behavior, changed contracts, or revised patterns introduced by your rework.
+            If `.cursor/skills/` directory exists, update the relevant SKILL files for any new
+            behavior, changed contracts, or revised patterns introduced by your rework.
+            If the directory does not exist, skip this step entirely.
 
             ### Step 8 — Commit and push
 

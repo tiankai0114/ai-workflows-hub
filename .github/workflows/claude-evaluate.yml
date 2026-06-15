@@ -62,6 +62,14 @@ on:
         required: false
         type: string
         default: 'us-west-2'
+      project_context:
+        description: >
+          Optional project-specific context prepended to the evaluation prompt.
+          Use this to describe the tech stack, architecture pattern, or special
+          evaluation focus areas. If omitted, Claude reads CLAUDE.md for project context.
+        required: false
+        type: string
+        default: ''
     secrets:
       github_app_id:
         description: 'GitHub App ID'
@@ -236,7 +244,7 @@ jobs:
           model: ${{ inputs.model }}
           max_turns: '100'
           prompt: |
-            You are the **Evaluator** for this project.
+            ${{ inputs.project_context != '' && format('## Project Context (provided by repo owner)\n\n{0}\n\n---\n\n', inputs.project_context) || '' }}You are the **Evaluator** for this project.
             You are an INDEPENDENT reviewer — you did NOT generate this code.
 
             ## Push Mode
@@ -252,7 +260,10 @@ jobs:
             Your task:
             1. Read PR #${{ inputs.pr_number }} description to find the linked issue and milestone number
             2. Read the source issue to find the **latest** Planner's Sprint Contract for THIS milestone
-            3. Read CLAUDE.md and the relevant SKILL files. Always read these baselines:
+            3. Read CLAUDE.md (if it exists) to understand the tech stack, architecture, and conventions.
+               Use this to calibrate all evaluation criteria below — apply standards appropriate to the
+               actual languages and frameworks in use, not assumed ones.
+               Read the relevant SKILL files. Always read these baselines if they exist:
                - `.cursor/skills/clean-code/SKILL.md`
                - `.cursor/skills/refactor/SKILL.md`
                - The touched sub-project's `development-standard/SKILL.md`
@@ -270,9 +281,10 @@ jobs:
             - Layer boundaries respected?
             - Naming conventions match SKILL standards?
 
-            **D. SKILL Consistency** (ENFORCEABLE)
-            - For each layer touched (engine, UI, server, shared packages, CI), check if corresponding
-              SKILL file was updated. Missing update → ❌.
+            **D. SKILL Consistency** (only if `.cursor/skills/` directory exists in the repo)
+            - If `.cursor/skills/` does NOT exist, mark this dimension as **N/A** and skip entirely.
+            - If it exists: for each layer touched, check if the corresponding SKILL file was updated.
+              Missing update → ❌.
             - Check PR body `## Skills Updated` section — must list every SKILL file changed OR
               explicitly justify why no update was needed per touched layer.
 
@@ -286,10 +298,15 @@ jobs:
               call the tool and compare against the PR diff.
 
             **G. Clean Code & Standard Compliance**
-            - Walk the diff for violations of `.cursor/skills/clean-code/SKILL.md`:
-              - `any` casts, non-null assertions `!`, missing return types
-              - Functions > 50 LOC, > 4 params, nesting > 3
-              - Magic literals, `console.*` in production code, floating promises
+            - If `.cursor/skills/clean-code/SKILL.md` exists, walk the diff for violations documented there.
+            - If the SKILL file does not exist, apply general clean code principles appropriate to the
+              languages observed in the diff (inferred from file extensions and syntax). Do NOT apply
+              language-specific rules (e.g. TypeScript `any`, `console.*`, floating promises) unless
+              the project's CLAUDE.md or SKILL files explicitly mention them.
+            - Universal checks regardless of language:
+              - Functions should be small and focused (flag if excessively long given the language norms)
+              - No magic literals without named constants
+              - No credentials, tokens, or sensitive data hardcoded
               - Drive-by reformatting mixed with feature changes
 
             6. Post your evaluation as a PR comment with overall verdict (NORMAL MODE only):
@@ -298,7 +315,7 @@ jobs:
             **Verdict aggregation:**
             - Any ❌ in A (Runtime) → 🔄 CHANGES REQUESTED
             - Any ❌ in B (Requirements) → 🔄 CHANGES REQUESTED
-            - Dimension D FAIL → 🔄 CHANGES REQUESTED
+            - Dimension D FAIL → 🔄 CHANGES REQUESTED (skip if D is N/A)
             - Dimension G FAIL (any ❌ item) → 🔄 CHANGES REQUESTED
             - Otherwise: ✅ APPROVE
 

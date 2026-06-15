@@ -36,6 +36,15 @@ on:
         required: false
         type: string
         default: 'us-west-2'
+      project_context:
+        description: >
+          Optional project-specific context prepended to the decomposition prompt.
+          Use this to describe the tech stack, module structure, or scope label
+          conventions so the Decomposer can split the issue more accurately.
+          If omitted, Claude reads CLAUDE.md for project context.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -91,7 +100,7 @@ jobs:
           model: ${{ inputs.model }}
           max_turns: '50'
           prompt: |
-            You are the **Decomposer** for this project.
+            ${{ inputs.project_context != '' && format('## Project Context (provided by repo owner)\n\n{0}\n\n---\n\n', inputs.project_context) || '' }}You are the **Decomposer** for this project.
 
             A large issue has been tagged for decomposition. Your job is to split it into
             smaller, scope-focused sub-issues that can each run through the standard PGE
@@ -103,7 +112,9 @@ jobs:
             gh issue view ${{ env.ISSUE_NUMBER }} --comments --repo ${{ env.GH_REPO }}
             ```
 
-            Also read CLAUDE.md to understand project structure and scope labels.
+            If `CLAUDE.md` exists at the repo root, read it to understand project structure
+            and scope labels. If it does not exist, infer scope boundaries from the issue
+            content and directory structure visible in the repository.
 
             ## Step 2: Analyze the scope and dependencies
 
@@ -114,7 +125,8 @@ jobs:
 
             Group changes into 2–5 sub-issues. Each sub-issue should:
             - Cover exactly 1–2 scopes
-            - Be implementable in a single PGE flow (estimated < 45 files)
+            - Be implementable in a single PGE flow (default guideline: < 45 files touched;
+              override this if the Project Context above specifies a different size target for this repo)
             - Have clear "Depends on: Sub-issue N" or "Depends on: none" noted
 
             ## Step 3: Create sub-issues
@@ -158,7 +170,8 @@ jobs:
             ## Rules
             - Do NOT add `pge/status:ready` or `pge/status:implement` to any sub-issue
             - Sub-issues must be self-contained with enough context for the Planner
-            - Keep sub-issues implementable in CI (< 45 estimated files each)
+            - Keep sub-issues to < 45 files touched each (default); use the Project Context
+              size target if one is specified above
             - Prefer 3–4 sub-issues over 6+
 
       - name: Verify decomposed label was applied

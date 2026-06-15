@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ai-workflows-hub 接入指南</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      padding: 40px 20px 80px;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .page-header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #0d1b2a;
+    }
+    .page-header p {
+      margin-top: 8px;
+      color: #555;
+      font-size: 0.95rem;
+    }
+    .badge {
+      display: inline-block;
+      background: #e8f4fd;
+      color: #0969da;
+      border: 1px solid #b6d4f7;
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 0.78rem;
+      margin-top: 10px;
+    }
+
+    .time-cards {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+    .time-card {
+      background: white;
+      border: 1px solid #e1e4e8;
+      border-radius: 10px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      font-size: 0.88rem;
+      color: #333;
+    }
+    .time-card .icon { font-size: 1.3rem; }
+    .time-card .label { color: #888; font-size: 0.78rem; display: block; margin-bottom: 2px; }
+    .time-card .value { font-weight: 700; color: #0d1b2a; font-size: 0.95rem; }
+    .time-card-note {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #888;
+    }
+
+    .timeline {
+      max-width: 860px;
+      margin: 0 auto;
+      position: relative;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 36px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, #0969da, #6f42c1, #1a7f37);
+    }
+
+    .step {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 28px;
+      position: relative;
+    }
+
+    .step-icon {
+      flex-shrink: 0;
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      background: white;
+      border: 3px solid #0969da;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      position: relative;
+      z-index: 1;
+      box-shadow: 0 2px 8px rgba(9,105,218,0.15);
+    }
+    .step-icon .num {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #0969da;
+      margin-top: 2px;
+    }
+
+    .step:nth-child(3) .step-icon { border-color: #6f42c1; }
+    .step:nth-child(3) .step-icon .num { color: #6f42c1; }
+    .step:nth-child(4) .step-icon { border-color: #6f42c1; }
+    .step:nth-child(4) .step-icon .num { color: #6f42c1; }
+    .step:nth-child(5) .step-icon { border-color: #1a7f37; }
+    .step:nth-child(5) .step-icon .num { color: #1a7f37; }
+    .step:nth-child(6) .step-icon { border-color: #1a7f37; }
+    .step:nth-child(6) .step-icon .num { color: #1a7f37; }
+    .step:nth-child(7) .step-icon { border-color: #1a7f37; }
+    .step:nth-child(7) .step-icon .num { color: #1a7f37; }
+
+    .step-body {
+      flex: 1;
+      background: white;
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border: 1px solid #e8eaed;
+    }
+
+    .step-body h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #0d1b2a;
+    }
+
+    .step-body p {
+      font-size: 0.9rem;
+      color: #555;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+
+    .checklist {
+      list-style: none;
+      margin-top: 8px;
+    }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.88rem;
+      color: #333;
+      padding: 5px 0;
+      border-bottom: 1px solid #f0f2f5;
+      line-height: 1.5;
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li::before {
+      content: '☐';
+      font-size: 1rem;
+      color: #0969da;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    code {
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.82em;
+      color: #c0392b;
+    }
+
+    pre {
+      background: #0d1117;
+      color: #e6edf3;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      margin-top: 10px;
+      line-height: 1.6;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+    pre .comment { color: #8b949e; }
+    pre .key { color: #79c0ff; }
+    pre .val { color: #a5d6ff; }
+    pre .str { color: #a5d6ff; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .tag-required { background: #fff0f0; color: #cf222e; border: 1px solid #ffc1c0; }
+    .tag-optional { background: #f0f8f0; color: #1a7f37; border: 1px solid #b5e3b5; }
+    .tag-auto     { background: #fffbe6; color: #9a6700; border: 1px solid #f5cc5c; }
+
+    .info-box {
+      background: #ddf4ff;
+      border: 1px solid #54aeff;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #0550ae;
+      margin-top: 10px;
+    }
+    .warn-box {
+      background: #fff8c5;
+      border: 1px solid #f5cc5c;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #7d4e00;
+      margin-top: 10px;
+    }
+
+    .secret-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-top: 10px;
+    }
+    .secret-table th {
+      background: #f6f8fa;
+      text-align: left;
+      padding: 8px 12px;
+      border: 1px solid #e1e4e8;
+      font-weight: 600;
+      color: #444;
+    }
+    .secret-table td {
+      padding: 8px 12px;
+      border: 1px solid #e1e4e8;
+      vertical-align: top;
+    }
+
+    .flow-box {
+      background: #f6f8fa;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: #333;
+      line-height: 2;
+    }
+    .flow-box .arrow { color: #0969da; font-weight: bold; }
+    .flow-box .label-tag {
+      background: #0969da;
+      color: white;
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .flow-box .bot-tag {
+      background: #6f42c1;
+      color: white;
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .reference-box {
+      max-width: 860px;
+      margin: 32px auto 0;
+      background: white;
+      border-radius: 12px;
+      padding: 20px 24px;
+      border: 1px solid #e8eaed;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .reference-box h3 { font-size: 0.95rem; margin-bottom: 12px; color: #444; }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>🤖 ai-workflows-hub 接入指南</h1>
+  <p>将 AI 驱动的开发工作流（PGE）集成到任意 GitHub Repo</p>
+  <p style="margin-top:6px; color:#444; font-size:0.9rem;">7 个步骤，一次配置，后续 Repo 复用。完成后给 Issue 加标签，AI 自动写代码、开 PR、评审。</p>
+  <span class="badge">AWS Bedrock · GitHub Actions · Claude</span>
+
+  <div class="time-cards">
+    <div class="time-card">
+      <span class="icon">⏱️</span>
+      <div>
+        <span class="label">预计接入时间</span>
+        <span class="value">15–20 分钟</span>
+      </div>
+    </div>
+    <div class="time-card">
+      <span class="icon">✅</span>
+      <div>
+        <span class="label">前提</span>
+        <span class="value">AWS Role 和 GitHub App 已就绪</span>
+      </div>
+    </div>
+    <div class="time-card">
+      <span class="icon">🔁</span>
+      <div>
+        <span class="label">可复用</span>
+        <span class="value">每个新 Repo 独立接入，互不影响</span>
+      </div>
+    </div>
+  </div>
+  <p class="time-card-note">尚未配置 AWS Role 或 GitHub App？首次搭建额外需要约 10 分钟。</p>
+</div>
+
+<!-- ───────── STEP 1 ───────── -->
+<div class="timeline">
+
+  <div class="step">
+    <div class="step-icon">📁<span class="num">步骤 1</span></div>
+    <div class="step-body">
+      <h2>复制模板文件</h2>
+      <p>将 library 中的标签、Issue 模板、CLAUDE.md 和 SKILL 文件复制到目标 repo。</p>
+      <ul class="checklist">
+        <li>克隆 <code>tiankai0114/ai-workflows-hub</code> 到本地临时目录</li>
+        <li>复制 <code>templates/labels.yml</code> → <code>.github/labels.yml</code></li>
+        <li>复制 <code>templates/ISSUE_TEMPLATE/</code> → <code>.github/ISSUE_TEMPLATE/</code></li>
+        <li>复制 <code>templates/CLAUDE.md.template</code> → <code>CLAUDE.md</code>，填写项目描述</li>
+        <li>复制 <code>templates/cursor-skills/</code> → <code>.cursor/skills/</code></li>
+      </ul>
+      <pre><span class="comment"># 克隆 library</span>
+gh repo clone tiankai0114/ai-workflows-hub /tmp/hub
+
+<span class="comment"># 进入目标 repo</span>
+cd /path/to/your-repo
+
+cp /tmp/hub/templates/labels.yml .github/labels.yml
+cp -r /tmp/hub/templates/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE
+cp /tmp/hub/templates/CLAUDE.md.template CLAUDE.md
+mkdir -p .cursor/skills
+cp -r /tmp/hub/templates/cursor-skills/clean-code .cursor/skills/
+cp -r /tmp/hub/templates/cursor-skills/refactor .cursor/skills/</pre>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 2 ───────── -->
+  <div class="step">
+    <div class="step-icon">☁️<span class="num">步骤 2</span></div>
+    <div class="step-body">
+      <h2>配置 AWS IAM Role Trust Policy</h2>
+      <p>在 AWS Console 找到用于 Bedrock 的 IAM Role，编辑 <strong>Trust relationships</strong>，允许目标 repo 通过 GitHub OIDC assume 该 Role。</p>
+      <ul class="checklist">
+        <li>打开 AWS Console → IAM → Roles → 找到 Bedrock Role</li>
+        <li>编辑 Trust relationships，加入以下 Statement</li>
+        <li>把 <code>YOUR_ACCOUNT_ID</code> 和 <code>YOUR_ORG/YOUR_REPO</code> 替换为实际值</li>
+        <li>确认 IAM Role 附加了 <code>bedrock:InvokeModel</code> 权限</li>
+      </ul>
+      <pre>{
+  <span class="key">"Effect"</span>: <span class="str">"Allow"</span>,
+  <span class="key">"Principal"</span>: {
+    <span class="key">"Federated"</span>: <span class="str">"arn:aws:iam::YOUR_ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"</span>
+  },
+  <span class="key">"Action"</span>: <span class="str">"sts:AssumeRoleWithWebIdentity"</span>,
+  <span class="key">"Condition"</span>: {
+    <span class="key">"StringEquals"</span>: {
+      <span class="key">"token.actions.githubusercontent.com:aud"</span>: <span class="str">"sts.amazonaws.com"</span>
+    },
+    <span class="key">"StringLike"</span>: {
+      <span class="key">"token.actions.githubusercontent.com:sub"</span>: <span class="str">"repo:YOUR_ORG/YOUR_REPO:*"</span>
+    }
+  }
+}</pre>
+      <div class="warn-box">⚠️ <code>sub</code> 条件不能写 <code>repo:org/*:*</code>，必须精确到 repo 名称（AWS 要求至少 6 个字符前缀才能用通配符）。每新增一个 repo 都需要在此加一条记录。</div>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 3 ───────── -->
+  <div class="step">
+    <div class="step-icon">🤖<span class="num">步骤 3</span></div>
+    <div class="step-body">
+      <h2>创建 GitHub App（Bot）</h2>
+      <p>Generator 需要以 bot 身份提交代码和开 PR。Code Review、Decompose 和 Plan 不需要此步骤。</p>
+      <ul class="checklist">
+        <li>打开 <a href="https://github.com/settings/apps/new" target="_blank">github.com/settings/apps/new</a></li>
+        <li>App name：填写全局唯一名称，建议加 repo 名前缀（如 <code>your-repo-ci</code>）</li>
+        <li>Webhook：取消勾选 Active</li>
+        <li>Permissions → Contents: Read & Write、Issues: Read & Write、Pull requests: Read & Write</li>
+        <li>Where installed：Only on this account</li>
+        <li>点击 <strong>Create GitHub App</strong>，记录页面顶部的 <strong>App ID</strong></li>
+        <li>点 <strong>Generate a private key</strong>，下载 <code>.pem</code> 文件</li>
+        <li>左侧菜单点 <strong>Install App</strong> → 安装到目标 repo</li>
+        <li>查询 bot user ID（见下方命令），记录返回的 <code>"id"</code> 值</li>
+      </ul>
+      <pre><span class="comment"># 查询 bot user ID（替换 your-app-name）</span>
+curl https://api.github.com/users/your-app-name%5Bbot%5D | grep '"id"'
+
+<span class="comment"># 或者浏览器访问：</span>
+https://api.github.com/users/your-app-name[bot]</pre>
+      <div class="info-box">ℹ️ App name 中的空格要换成 <code>-</code>，全小写拼接 <code>[bot]</code> 后缀即是 bot username。</div>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 4 ───────── -->
+  <div class="step">
+    <div class="step-icon">🔑<span class="num">步骤 4</span></div>
+    <div class="step-body">
+      <h2>在目标 Repo 添加 Secrets</h2>
+      <p>打开目标 repo → <strong>Settings → Secrets and variables → Actions → New repository secret</strong></p>
+      <table class="secret-table">
+        <thead>
+          <tr><th>Secret 名</th><th>值</th><th>必须</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>GH_APP_ID</code></td>
+            <td>GitHub App 的数字 ID</td>
+            <td><span class="tag tag-required">必须</span> Implement / Evaluate</td>
+          </tr>
+          <tr>
+            <td><code>GH_APP_PRIVATE_KEY</code></td>
+            <td><code>.pem</code> 文件完整内容（含 <code>-----BEGIN RSA PRIVATE KEY-----</code> 头尾行）</td>
+            <td><span class="tag tag-required">必须</span> Implement / Evaluate</td>
+          </tr>
+          <tr>
+            <td><code>FIGMA_TOKEN</code></td>
+            <td>Figma Personal Access Token</td>
+            <td><span class="tag tag-optional">可选</span> 有 Figma 设计稿时使用</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="info-box">ℹ️ Code Review、Decompose 和 Plan 只需要 AWS Role ARN（写在 workflow with 里），<strong>不需要</strong> GH_APP_ID / GH_APP_PRIVATE_KEY。</div>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 5 ───────── -->
+  <div class="step">
+    <div class="step-icon">🏷️<span class="num">步骤 5</span></div>
+    <div class="step-body">
+      <h2>导入 PGE 标签</h2>
+      <p>将 PGE 标签体系导入到目标 repo，后续所有 workflow 触发都依赖这些标签。</p>
+      <ul class="checklist">
+        <li>确认 <code>.github/labels.yml</code> 已在 repo 中（步骤 1 已复制）</li>
+        <li>运行以下命令导入</li>
+      </ul>
+      <pre><span class="comment"># 确保 gh CLI 已登录</span>
+gh auth login
+
+<span class="comment"># 导入标签</span>
+gh label import .github/labels.yml --repo YOUR_ORG/YOUR_REPO</pre>
+      <div class="warn-box">⚠️ 标签导入是 API 操作，不需要 commit 代码。但建议把 <code>labels.yml</code> 保留在 repo 里，方便后续重新导入或新成员查阅。</div>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 6 ───────── -->
+  <div class="step">
+    <div class="step-icon">📝<span class="num">步骤 6</span></div>
+    <div class="step-body">
+      <h2>提交模板文件到默认分支</h2>
+      <p>Issue Templates 必须在默认分支（main / master）上才会在 GitHub 的"New Issue"页面生效。</p>
+      <ul class="checklist">
+        <li>将步骤 1 复制的文件全部 commit</li>
+        <li>推送到默认分支（main 或 master）</li>
+        <li>打开 repo → Issues → New issue，确认模板列表出现</li>
+      </ul>
+      <pre>git add .github/ISSUE_TEMPLATE .github/labels.yml CLAUDE.md .cursor/
+git commit -m "chore: add PGE issue templates, CLAUDE.md and skill files"
+git push origin main</pre>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 7 ───────── -->
+  <div class="step">
+    <div class="step-icon">⚙️<span class="num">步骤 7</span></div>
+    <div class="step-body">
+      <h2>添加触发 Workflow 文件</h2>
+      <p>在 <code>.github/workflows/</code> 下创建以下文件。替换三个占位符后 commit 到默认分支即可生效。</p>
+
+      <table class="secret-table" style="margin-bottom:12px">
+        <thead><tr><th>占位符</th><th>替换为</th></tr></thead>
+        <tbody>
+          <tr><td><code>YOUR_ROLE_ARN</code></td><td>IAM Role ARN，如 <code>arn:aws:iam::123456:role/my-bedrock-role</code></td></tr>
+          <tr><td><code>YOUR_BOT_NAME</code></td><td>GitHub App bot username，如 <code>my-app-ci[bot]</code></td></tr>
+          <tr><td><code>YOUR_BOT_ID</code></td><td>步骤 3 查到的数字 user ID</td></tr>
+        </tbody>
+      </table>
+
+      <ul class="checklist">
+        <li><code>pge-code-review.yml</code> <span class="tag tag-optional">无需 GitHub App</span> — 人工 PR 提交时触发代码审查</li>
+        <li><code>pge-decompose.yml</code> <span class="tag tag-optional">无需 GitHub App</span> — Issue 加 <code>pge/status:decompose</code> 标签时拆分</li>
+        <li><code>pge-plan.yml</code> <span class="tag tag-optional">无需 GitHub App</span> — Issue 加 <code>pge/status:ready</code> 标签时分析出计划</li>
+        <li><code>pge-implement.yml</code> <span class="tag tag-required">需要 GitHub App</span> — Issue 加 <code>pge/status:implement</code> 时写代码开 PR；PR 加 <code>pge/pr:needs-rework</code> 时自动修复</li>
+        <li><code>pge-evaluate.yml</code> <span class="tag tag-required">需要 GitHub App</span> — bot PR 打开/更新时评审；通过后推进下一里程碑</li>
+        <li>将以上文件 commit 并 push 到默认分支</li>
+      </ul>
+      <pre>git add .github/workflows/pge-*.yml
+git commit -m "feat: add PGE workflow triggers"
+git push origin main</pre>
+      <div class="warn-box">⚠️ <code>pge-implement.yml</code> 中的 <code>evaluator_workflow_name</code> 默认值为 <code>"Claude: Evaluator"</code>，与 <code>pge-evaluate.yml</code> 的 <code>name:</code> 字段保持一致即可。若你自定义了 evaluator 的 workflow 名称，需同步修改此参数，否则 Rework 模式下将无法触发 Evaluator 重新评审。</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ───────── 完整流程图 ───────── -->
+<div class="reference-box">
+  <h3>✅ 接入完成后的完整工作流</h3>
+  <div class="flow-box">
+    创建 Issue（使用 Issue Template）<br>
+    <span class="arrow">↓</span> 加标签 <span class="label-tag">pge/status:decompose</span><br>
+    &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Decomposer</span> 自动拆分为带依赖关系的子 Issue<br>
+    <span class="arrow">↓</span> 给子 Issue 加标签 <span class="label-tag">pge/status:ready</span><br>
+    &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Planner</span> 扫描代码库 → 自动问答（≤3 轮）→ 输出里程碑计划<br>
+    <span class="arrow">↓</span> 确认计划 → 加标签 <span class="label-tag">pge/status:implement</span><br>
+    &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Generator</span> 写代码 → 以 bot 身份开 PR<br>
+    <span class="arrow">↓</span> PR 自动触发 <span class="label-tag">pge/pr:approved</span> 或 <span class="label-tag">pge/pr:needs-rework</span><br>
+    &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Evaluator</span> build + lint + test + 代码审查 → 通过则推进下一 Milestone<br>
+    <span class="arrow">↓</span> 人工 review 并合并 PR
+  </div>
+</div>
+
+<!-- ───────── 参考值 ───────── -->
+<div class="reference-box" style="margin-top:16px">
+  <h3>📌 demo repo 实际配置参考（tiankai0114/search-android-demo-app）</h3>
+  <table class="secret-table">
+    <thead><tr><th>参数</th><th>值</th></tr></thead>
+    <tbody>
+      <tr><td><code>aws_role</code></td><td><code>arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge</code></td></tr>
+      <tr><td><code>bot_name</code></td><td><code>ai-test-kai[bot]</code></td></tr>
+      <tr><td><code>bot_id</code></td><td><code>290981734</code></td></tr>
+      <tr><td>GitHub App ID（<code>GH_APP_ID</code>）</td><td><code>3969724</code></td></tr>
+      <tr><td>App name</td><td><code>ai-test-kai</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>
