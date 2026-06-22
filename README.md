@@ -54,6 +54,7 @@ flowchart TD
 | File | Type | Description |
 |------|------|-------------|
 | `.github/actions/claude-bedrock/` | Composite Action | Core: invoke AWS Bedrock Claude with OIDC auth |
+| `.github/actions/harness-guard/` | Composite Action | Deterministic PR Harness checks: diff size, protected paths, provenance, secrets |
 | `.github/actions/jira-handler/` | Composite Action | Create Jira issues via REST API |
 | `.github/actions/teams-handler/` | Composite Action | Send Microsoft Teams notifications |
 | `.github/workflows/claude-plan.yml` | Reusable Workflow | PGE Planner — analyze issue, auto Q&A, generate milestone plan |
@@ -61,6 +62,7 @@ flowchart TD
 | `.github/workflows/claude-evaluate.yml` | Reusable Workflow | PGE Evaluator + Milestone Advance — review PR, advance milestones |
 | `.github/workflows/claude-code-review.yml` | Reusable Workflow | Code Review — lightweight review for human-authored PRs |
 | `.github/workflows/claude-decompose.yml` | Reusable Workflow | Decomposer — split a large issue into sub-issues with dependencies |
+| `.github/workflows/harness-preflight.yml` | Reusable Workflow | Harness MVP — run deterministic PR safety checks and emit `harness-summary.json` |
 | `.github/workflows/cloudwatch-debug.yml` | Reusable Workflow | CloudWatch log polling → Claude analysis → Jira/Teams |
 
 ### Template-based (copy once from `templates/`)
@@ -72,6 +74,14 @@ flowchart TD
 | `templates/CLAUDE.md.template` | CLAUDE.md scaffold |
 | `templates/cursor-skills/clean-code/SKILL.md` | Cross-repo code quality baseline |
 | `templates/cursor-skills/refactor/SKILL.md` | Cross-repo refactoring protocol |
+
+---
+
+## Harness MVP
+
+The Evaluator includes a deterministic Harness preflight before Claude review. Harness does not call an AI model. It checks PR diff size, protected path changes, bot PR provenance, and high-confidence secret patterns, then writes `harness-summary.json`.
+
+Harness `fail` has priority over Claude review: the Evaluator skips Claude, applies `pge/pr:blocked-by-harness` and `pge/pr:needs-rework`, and requests changes. Harness `warn` allows Claude review to continue, but the Evaluator must treat warnings as concrete evidence. The MVP does not run project build/test commands; those remain part of the PR verification evidence and future Harness phases.
 
 ---
 

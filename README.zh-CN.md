@@ -54,6 +54,7 @@ flowchart TD
 | 文件 | 类型 | 说明 |
 |------|------|------|
 | `.github/actions/claude-bedrock/` | Composite Action | AWS Bedrock Claude 调用核心（OIDC 认证） |
+| `.github/actions/harness-guard/` | Composite Action | 确定性 PR Harness 检查：diff 大小、受保护路径、来源追踪、secret |
 | `.github/actions/jira-handler/` | Composite Action | 调用 Jira REST API 创建 Issue |
 | `.github/actions/teams-handler/` | Composite Action | 发送 Teams 通知 |
 | `.github/workflows/claude-plan.yml` | Reusable Workflow | PGE Planner — 分析 Issue，自动问答，生成里程碑计划 |
@@ -61,6 +62,7 @@ flowchart TD
 | `.github/workflows/claude-evaluate.yml` | Reusable Workflow | PGE Evaluator + Milestone Advance — 评审 PR，推进里程碑 |
 | `.github/workflows/claude-code-review.yml` | Reusable Workflow | Code Review — 人工 PR 的轻量代码审查 |
 | `.github/workflows/claude-decompose.yml` | Reusable Workflow | Decomposer — 将大 Issue 拆分为带依赖关系的子 Issue |
+| `.github/workflows/harness-preflight.yml` | Reusable Workflow | Harness MVP — 执行确定性 PR 安全检查并输出 `harness-summary.json` |
 | `.github/workflows/cloudwatch-debug.yml` | Reusable Workflow | CloudWatch 日志轮询 → Claude 分析 → Jira/Teams |
 
 ### 复制型（从 `templates/` 复制一次）
@@ -72,6 +74,14 @@ flowchart TD
 | `templates/CLAUDE.md.template` | CLAUDE.md 骨架 |
 | `templates/cursor-skills/clean-code/SKILL.md` | 跨项目代码质量基线 |
 | `templates/cursor-skills/refactor/SKILL.md` | 跨项目重构协议 |
+
+---
+
+## Harness MVP
+
+Evaluator 在 Claude 评审前会先运行确定性的 Harness preflight。Harness 不调用 AI 模型；它检查 PR diff 大小、受保护路径、bot PR 来源追踪以及高置信度 secret pattern，并输出 `harness-summary.json`。
+
+Harness `fail` 的优先级高于 Claude review：Evaluator 会跳过 Claude，添加 `pge/pr:blocked-by-harness` 和 `pge/pr:needs-rework`，并请求修改。Harness `warn` 不阻断 Claude review，但 Evaluator 必须把 warning 当作确定性证据处理。MVP 阶段不会运行项目 build/test 命令；这些仍由 PR 验证结果提供，后续 Harness 阶段再接入。
 
 ---
 

@@ -136,7 +136,7 @@ jobs:
         with:
           script: |
             const prNumber = parseInt('${{ inputs.pr_number }}');
-            for (const label of ['pge/pr:approved', 'pge/pr:needs-rework', 'pge/pr:rejected']) {
+            for (const label of ['pge/pr:approved', 'pge/pr:needs-rework', 'pge/pr:rejected', 'pge/pr:blocked-by-harness']) {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -207,7 +207,65 @@ jobs:
           app-id: ${{ secrets.github_app_id }}
           private-key: ${{ secrets.github_app_private_key }}
 
+      - name: Run Harness Guard
+        id: harness
+        uses: tiankai0114/ai-workflows-hub/.github/actions/harness-guard@feature/REL-15337-add-new-paradigms
+        with:
+          github_token: ${{ github.token }}
+          pr_number: ${{ inputs.pr_number }}
+          bot_name: ${{ inputs.bot_name }}
+          summary_path: harness-summary.json
+
+      - name: Upload Harness summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-summary-${{ inputs.pr_number }}
+          path: harness-summary.json
+          if-no-files-found: error
+
+      - name: Block PR when Harness fails
+        if: steps.harness.outputs.status == 'fail'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const fs = require('fs');
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+            const summary = JSON.parse(fs.readFileSync('harness-summary.json', 'utf8'));
+            const blocking = (summary.findings || []).filter(f => f.severity === 'blocking');
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              name: 'pge/pr:approved'
+            }).catch(() => {});
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['pge/pr:blocked-by-harness', 'pge/pr:needs-rework']
+            });
+            const findingsText = blocking.length
+              ? blocking.map(f => `- **${f.code}**${f.path ? ` (${f.path})` : ''}: ${f.message}`).join('\n')
+              : '- Harness reported failure without detailed blocking findings.';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: [
+                '## Harness Blocked This PR',
+                '',
+                'Deterministic Harness checks failed, so Claude Evaluator was skipped. Fix the blocking findings and re-run evaluation.',
+                '',
+                '### Blocking findings',
+                findingsText,
+                '',
+                `Harness summary artifact: \`harness-summary-${{ inputs.pr_number }}\``
+              ].join('\n')
+            });
+
       - name: Detect Figma references
+        if: steps.harness.outputs.status != 'fail'
         id: detect-figma
         env:
           GH_TOKEN: ${{ github.token }}
@@ -233,6 +291,7 @@ jobs:
           fi
 
       - uses: tiankai0114/ai-workflows-hub/.github/actions/claude-bedrock@v1
+        if: steps.harness.outputs.status != 'fail'
         with:
           github_token: ${{ steps.app-token.outputs.token }}
           figma_token: ${{ steps.detect-figma.outputs.found == 'true' && secrets.figma_token || '' }}
@@ -249,6 +308,15 @@ jobs:
 
             ## Push Mode
             human_push = ${{ steps.push-mode.outputs.human_push }}
+
+            ## Harness MVP
+
+            A deterministic Harness preflight already ran for this PR and wrote `harness-summary.json`.
+            Harness status: `${{ steps.harness.outputs.status }}`.
+
+            - If the status is `warn`, read `harness-summary.json` and include the warnings in your evaluation.
+            - Treat Harness warnings as concrete evidence, not as model opinions.
+            - Harness failures are handled before this step, so you should never approve a PR with unresolved blocking Harness findings.
 
             **If human_push is "true":** You are in **OBSERVATION MODE**:
             - Post findings as an informational comment only
@@ -343,11 +411,13 @@ jobs:
             const { data: labels } = await github.rest.issues.listLabelsOnIssue({
               owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber,
             });
+            const blockedByHarness = labels.some(l => l.name === 'pge/pr:blocked-by-harness');
             const approved = labels.some(l => l.name === 'pge/pr:approved');
             const needsRework = labels.some(l => l.name === 'pge/pr:needs-rework');
             const rejected = labels.some(l => l.name === 'pge/pr:rejected');
-            const event = approved ? 'APPROVE' : (needsRework || rejected) ? 'REQUEST_CHANGES' : 'COMMENT';
-            const body = approved ? '✅ Evaluator approved this PR.'
+            const event = approved ? 'APPROVE' : (blockedByHarness || needsRework || rejected) ? 'REQUEST_CHANGES' : 'COMMENT';
+            const body = blockedByHarness ? 'Harness blocked this PR before Claude evaluation. See the Harness findings comment.'
+                       : approved ? '✅ Evaluator approved this PR.'
                        : needsRework ? '🔄 Evaluator requested changes.'
                        : rejected ? '❌ Evaluator rejected this PR.'
                        : '📋 Evaluation complete.';

@@ -1,0 +1,119 @@
+name: "Harness: Preflight"
+
+# Reusable workflow — deterministic PR safety gate for workflows.
+# It does not call Claude. It emits a machine-readable harness-summary.json
+# and optional job failure when enforce=true.
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: 'Harness mode. MVP supports "pr".'
+        required: false
+        type: string
+        default: 'pr'
+      pr_number:
+        description: 'Pull request number to inspect'
+        required: true
+        type: string
+      bot_name:
+        description: 'Expected bot login for generated milestone PRs'
+        required: false
+        type: string
+        default: ''
+      max_changed_files:
+        description: 'Warn when changed file count exceeds this value'
+        required: false
+        type: number
+        default: 45
+      max_diff_lines:
+        description: 'Warn when additions + deletions exceeds this value'
+        required: false
+        type: number
+        default: 1500
+      enforce:
+        description: 'Fail the job when Harness status is fail'
+        required: false
+        type: boolean
+        default: false
+
+    outputs:
+      harness_status:
+        description: 'Harness status: pass | warn | fail'
+        value: ${{ jobs.harness.outputs.status }}
+      blocking_findings:
+        description: 'Number of blocking findings'
+        value: ${{ jobs.harness.outputs.blocking_findings }}
+      warnings:
+        description: 'Number of warning findings'
+        value: ${{ jobs.harness.outputs.warnings }}
+      summary_json:
+        description: 'Compact machine-readable summary JSON'
+        value: ${{ jobs.harness.outputs.summary_json }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      status: ${{ steps.guard.outputs.status }}
+      blocking_findings: ${{ steps.guard.outputs.blocking_findings }}
+      warnings: ${{ steps.guard.outputs.warnings }}
+      summary_json: ${{ steps.guard.outputs.summary_json }}
+
+    steps:
+      - name: Validate mode
+        run: |
+          if [ "${{ inputs.mode }}" != "pr" ]; then
+            echo "::error::Harness MVP only supports mode=pr."
+            exit 1
+          fi
+
+      - name: Resolve PR head
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}', 10);
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('title', pr.title);
+
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
+
+      - name: Run Harness Guard
+        id: guard
+        uses: tiankai0114/ai-workflows-hub/.github/actions/harness-guard@feature/REL-15337-add-new-paradigms
+        with:
+          github_token: ${{ github.token }}
+          pr_number: ${{ inputs.pr_number }}
+          bot_name: ${{ inputs.bot_name }}
+          max_changed_files: ${{ inputs.max_changed_files }}
+          max_diff_lines: ${{ inputs.max_diff_lines }}
+          summary_path: harness-summary.json
+
+      - name: Upload Harness summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-summary-${{ inputs.pr_number }}
+          path: harness-summary.json
+          if-no-files-found: error
+
+      - name: Enforce Harness failure
+        if: inputs.enforce && steps.guard.outputs.status == 'fail'
+        run: |
+          echo "::error::Harness failed with ${{ steps.guard.outputs.blocking_findings }} blocking finding(s)."
+          exit 1

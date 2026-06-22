@@ -104,3 +104,12 @@ Every issue must have all three required label categories:
 <!-- Update these to match your project's scope labels in labels.yml -->
 - `pge/scope:[sub-project-1]`
 - `pge/scope:[sub-project-2]`
+
+## Harness Handling
+
+Harness is the deterministic safety layer that runs before Claude Evaluator on PRs.
+Treat Harness output as stronger evidence than model judgment.
+
+- `pge/pr:blocked-by-harness` means a deterministic gate failed. Do not merge until the blocking finding is fixed or a human explicitly accepts the risk.
+- Harness warnings do not block evaluation, but they must be addressed in the PR discussion or justified in the PR body.
+- The Harness MVP checks diff size, protected paths, bot PR provenance, and high-confidence secret patterns. It does not run project build/test commands yet.

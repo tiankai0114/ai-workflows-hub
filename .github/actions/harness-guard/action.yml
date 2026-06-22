@@ -1,0 +1,247 @@
+name: 'Harness Guard'
+description: >
+  Deterministic PR safety gate for workflows. Checks diff size, protected
+  paths, bot PR provenance, high-confidence secrets, and writes a JSON summary.
+
+inputs:
+  github_token:
+    description: 'GitHub token for API access'
+    required: true
+  pr_number:
+    description: 'Pull request number to inspect'
+    required: true
+  bot_name:
+    description: 'Expected bot login for generated milestone PRs'
+    required: false
+    default: ''
+  max_changed_files:
+    description: 'Warn when changed file count exceeds this value'
+    required: false
+    default: '45'
+  max_diff_lines:
+    description: 'Warn when additions + deletions exceeds this value'
+    required: false
+    default: '1500'
+  summary_path:
+    description: 'Path to write harness-summary.json'
+    required: false
+    default: 'harness-summary.json'
+
+outputs:
+  status:
+    description: 'Harness status: pass | warn | fail'
+    value: ${{ steps.guard.outputs.status }}
+  blocking_findings:
+    description: 'Number of blocking findings'
+    value: ${{ steps.guard.outputs.blocking_findings }}
+  warnings:
+    description: 'Number of warning findings'
+    value: ${{ steps.guard.outputs.warnings }}
+  summary_path:
+    description: 'Path to harness-summary.json'
+    value: ${{ steps.guard.outputs.summary_path }}
+  summary_json:
+    description: 'Compact machine-readable summary JSON'
+    value: ${{ steps.guard.outputs.summary_json }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run deterministic Harness checks
+      id: guard
+      uses: actions/github-script@v7
+      env:
+        BOT_NAME: ${{ inputs.bot_name }}
+        MAX_CHANGED_FILES: ${{ inputs.max_changed_files }}
+        MAX_DIFF_LINES: ${{ inputs.max_diff_lines }}
+        SUMMARY_PATH: ${{ inputs.summary_path }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+
+          const prNumber = Number('${{ inputs.pr_number }}');
+          if (!Number.isInteger(prNumber) || prNumber <= 0) {
+            throw new Error(`Invalid pr_number: ${{ inputs.pr_number }}`);
+          }
+
+          const maxChangedFiles = Number(process.env.MAX_CHANGED_FILES || 45);
+          const maxDiffLines = Number(process.env.MAX_DIFF_LINES || 1500);
+          const botName = process.env.BOT_NAME || '';
+          const summaryPath = process.env.SUMMARY_PATH || 'harness-summary.json';
+          const findings = [];
+
+          const addFinding = (severity, code, message, extra = {}) => {
+            findings.push({ severity, code, message, ...extra });
+          };
+
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: prNumber,
+          });
+
+          const files = await github.paginate(github.rest.pulls.listFiles, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: prNumber,
+            per_page: 100,
+          });
+
+          const changedFiles = pr.changed_files ?? files.length;
+          const additions = pr.additions ?? files.reduce((sum, file) => sum + (file.additions || 0), 0);
+          const deletions = pr.deletions ?? files.reduce((sum, file) => sum + (file.deletions || 0), 0);
+          const diffLines = additions + deletions;
+
+          if (changedFiles > maxChangedFiles) {
+            addFinding(
+              'warning',
+              'PR_TOO_LARGE_FILES',
+              `PR changes ${changedFiles} files, above max_changed_files=${maxChangedFiles}.`,
+            );
+          }
+          if (diffLines > maxDiffLines) {
+            addFinding(
+              'warning',
+              'PR_TOO_LARGE_DIFF',
+              `PR changes ${diffLines} lines, above max_diff_lines=${maxDiffLines}.`,
+            );
+          }
+
+          const isWorkflowPath = (filePath) =>
+            filePath.startsWith('.github/workflows/') || filePath.startsWith('.github/actions/');
+          const isBlockingProtectedPath = (filePath) => {
+            const lower = filePath.toLowerCase();
+            const base = path.basename(lower);
+            return (
+              base.startsWith('.env') ||
+              lower === 'gradle.properties' ||
+              lower.endsWith('/gradle.properties') ||
+              lower.includes('secret') ||
+              lower.includes('credential')
+            );
+          };
+
+          for (const file of files) {
+            if (isBlockingProtectedPath(file.filename)) {
+              addFinding(
+                'blocking',
+                'PROTECTED_PATH_BLOCKED',
+                `Protected sensitive path changed: ${file.filename}`,
+                { path: file.filename },
+              );
+            } else if (isWorkflowPath(file.filename)) {
+              addFinding(
+                'warning',
+                'PROTECTED_PATH_TOUCHED',
+                `Workflow/action path changed: ${file.filename}`,
+                { path: file.filename },
+              );
+            }
+          }
+
+          const author = pr.user?.login || '';
+          const isExpectedBot = Boolean(botName) && author === botName;
+          const isBotLikePr = author.endsWith('[bot]') || /\[Milestone \d+\/\d+\]/.test(pr.title || '');
+          const hasMilestoneTitle = /\[Milestone \d+\/\d+\]/.test(pr.title || '');
+          const sourceIssueMatch = (pr.body || '').match(/<!--\s*pge-source-issue:\s*(\d+)\s*-->/);
+          const hasSourceIssueMarker = Boolean(sourceIssueMatch);
+          const sourceIssue = sourceIssueMatch ? Number(sourceIssueMatch[1]) : null;
+
+          if (isExpectedBot && (!hasMilestoneTitle || !hasSourceIssueMarker)) {
+            addFinding(
+              'blocking',
+              'BOT_PR_PROVENANCE_MISSING',
+              'Expected bot PR is missing milestone title or pge-source-issue marker.',
+            );
+          } else if (isBotLikePr && (!hasMilestoneTitle || !hasSourceIssueMarker)) {
+            addFinding(
+              'warning',
+              'BOT_PR_PROVENANCE_INCOMPLETE',
+              'Bot-like or milestone PR is missing milestone title or pge-source-issue marker.',
+            );
+          }
+
+          const secretPatterns = [
+            { code: 'PRIVATE_KEY_DETECTED', pattern: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |)?PRIVATE KEY-----/ },
+            { code: 'GITHUB_TOKEN_DETECTED', pattern: /gh[pousr]_[A-Za-z0-9_]{36,}/ },
+            { code: 'AWS_ACCESS_KEY_DETECTED', pattern: /AKIA[0-9A-Z]{16}/ },
+            { code: 'SLACK_TOKEN_DETECTED', pattern: /xox[baprs]-[A-Za-z0-9-]{10,}/ },
+            { code: 'GENERIC_SECRET_ASSIGNMENT', pattern: /(api[_-]?key|secret|token|password)\s*[:=]\s*['\"][^'\"\s]{16,}['\"]/i },
+          ];
+
+          const scanText = (text, filename) => {
+            if (!text) return;
+            for (const { code, pattern } of secretPatterns) {
+              if (pattern.test(text)) {
+                addFinding(
+                  'blocking',
+                  code,
+                  `High-confidence secret pattern detected in ${filename}.`,
+                  { path: filename },
+                );
+              }
+            }
+          };
+
+          scanText(pr.title || '', 'PR title');
+          scanText(pr.body || '', 'PR body');
+          for (const file of files) {
+            scanText(file.patch || '', file.filename);
+          }
+
+          const blockingFindings = findings.filter((finding) => finding.severity === 'blocking').length;
+          const warnings = findings.filter((finding) => finding.severity === 'warning').length;
+          const status = blockingFindings > 0 ? 'fail' : warnings > 0 ? 'warn' : 'pass';
+
+          const summary = {
+            schema_version: 'harness.mvp.v1',
+            status,
+            repository: `${context.repo.owner}/${context.repo.repo}`,
+            run_id: String(context.runId),
+            pr_number: prNumber,
+            actor: context.actor,
+            pr_author: author,
+            bot_pr: isExpectedBot || isBotLikePr,
+            diff: {
+              changed_files: changedFiles,
+              additions,
+              deletions,
+              diff_lines: diffLines,
+              max_changed_files: maxChangedFiles,
+              max_diff_lines: maxDiffLines,
+            },
+            provenance: {
+              has_milestone_title: hasMilestoneTitle,
+              source_issue: sourceIssue,
+              has_source_issue_marker: hasSourceIssueMarker,
+            },
+            findings,
+          };
+
+          fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
+
+          const compactSummary = JSON.stringify(summary);
+          core.setOutput('status', status);
+          core.setOutput('blocking_findings', String(blockingFindings));
+          core.setOutput('warnings', String(warnings));
+          core.setOutput('summary_path', summaryPath);
+          core.setOutput('summary_json', compactSummary);
+
+          await core.summary
+            .addHeading('Harness MVP Summary')
+            .addTable([
+              [
+                { data: 'Metric', header: true },
+                { data: 'Value', header: true },
+              ],
+              ['Status', status],
+              ['Blocking findings', String(blockingFindings)],
+              ['Warnings', String(warnings)],
+              ['Changed files', String(changedFiles)],
+              ['Diff lines', String(diffLines)],
+            ])
+            .addRaw(findings.length ? '\n### Findings\n' : '\nNo Harness findings.\n')
+            .addList(findings.map((finding) => `${finding.severity}: ${finding.code} - ${finding.message}`))
+            .write();
