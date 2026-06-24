@@ -200,6 +200,35 @@ jobs:
             core.setOutput('changed_paths', paths.join('\n'));
             core.setOutput('summary', 'Changed files: ' + paths.length + '. Run `CLAUDE.md` build commands to verify.');
 
+      # ── Optional: run consumer verification script ─────────────────────────────
+      # If the consumer repo provides .github/scripts/pge-verify.sh, run it now.
+      # The script receives CHANGED_PATHS (newline-separated) and PR_NUMBER as env
+      # vars and is expected to exit 0 on success, non-zero on failure.
+      # If the file does not exist, this step is skipped and Claude falls back to
+      # checking the PR description (same behaviour as before).
+      - name: Run consumer verification script (if present)
+        id: verify-script
+        continue-on-error: true
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          CHANGED_PATHS: ${{ steps.verify-results.outputs.changed_paths }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f ".github/scripts/pge-verify.sh" ]; then
+            echo "Found .github/scripts/pge-verify.sh — running..."
+            chmod +x .github/scripts/pge-verify.sh
+            if bash .github/scripts/pge-verify.sh; then
+              echo "result=pass" >> "$GITHUB_OUTPUT"
+            else
+              echo "result=fail" >> "$GITHUB_OUTPUT"
+            fi
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No .github/scripts/pge-verify.sh found — skipping (Claude will rely on PR description)."
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+            echo "result=skipped" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -262,6 +291,51 @@ jobs:
                 '',
                 `Harness summary artifact: \`harness-summary-${{ inputs.pr_number }}\``
               ].join('\n')
+            });
+
+      # ── CI gate: block Claude if pge-verify.sh reported a failure ──────────────
+      # Uses the app token so pge/pr:needs-rework triggers the Rework workflow.
+      # Human pushes to bot PRs are NOT gated — they get a comment instead.
+      - name: CI gate — block on verification failure (bot push / rework)
+        if: steps.verify-script.outputs.result == 'fail' && steps.push-mode.outputs.human_push != 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const prNumber = parseInt('${{ inputs.pr_number }}');
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['pge/pr:needs-rework'],
+            });
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: [
+                '🔴 **CI Gate blocked Evaluator** — `.github/scripts/pge-verify.sh` exited with a non-zero code.',
+                '',
+                'Fix the build/lint/test failures before the Evaluator can run.',
+              ].join('\n'),
+            });
+            core.setFailed('Verification script failed — Evaluator blocked.');
+
+      - name: CI gate — notify failures (human push, observation mode)
+        if: steps.verify-script.outputs.result == 'fail' && steps.push-mode.outputs.human_push == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt('${{ inputs.pr_number }}'),
+              body: [
+                '🔴 **CI failures detected on human push** — `.github/scripts/pge-verify.sh` exited with a non-zero code.',
+                '',
+                '> ℹ️ This push was made by a human developer. The Evaluator is running in **observation mode** — no `pge/pr:needs-rework` label has been added. Fix these before merging.',
+              ].join('\n'),
             });
 
       - name: Detect Figma references
@@ -339,8 +413,12 @@ jobs:
             5. Grade the PR against these dimensions:
 
             **A. Runtime Verification**
-            - Check if the PR description mentions passing build/lint/test for affected sub-projects.
-              In NORMAL MODE: any reported failure → 🔄 CHANGES REQUESTED.
+            Verification script: ran=${{ steps.verify-script.outputs.ran }}, result=${{ steps.verify-script.outputs.result }}
+            - If result is **"pass"**: ✅ `.github/scripts/pge-verify.sh` passed — builds verified.
+            - If result is **"fail"**: already blocked by CI gate before this step; treat as ❌.
+            - If result is **"skipped"** (no script found): check if the PR description mentions
+              passing build/lint/test for all affected sub-projects.
+              Any reported failure → 🔄 CHANGES REQUESTED.
 
             **B. Requirement Coverage** (Pass/Fail per criterion)
             - For each acceptance criterion in the Sprint Contract: ✅ met / ❌ not met / ⚠️ partially met
@@ -351,10 +429,40 @@ jobs:
 
             **D. SKILL Consistency** (only if `.cursor/skills/` directory exists in the repo)
             - If `.cursor/skills/` does NOT exist, mark this dimension as **N/A** and skip entirely.
-            - If it exists: for each layer touched, check if the corresponding SKILL file was updated.
-              Missing update → ❌.
-            - Check PR body `## Skills Updated` section — must list every SKILL file changed OR
-              explicitly justify why no update was needed per touched layer.
+            - If it exists, walk through every layer the PR touches:
+              1. For each modified directory/module, check whether a corresponding SKILL file exists
+                 (e.g. `.cursor/skills/<layer>/SKILL.md`, `<subproject>/.cursor/skills/<domain>/SKILL.md`).
+              2. If a matching SKILL file exists: was it updated? Missing update → ❌.
+              3. If no matching SKILL file exists for a layer: ⚠️ (informational — new patterns
+                 should eventually be documented, but don't block on missing SKILL files).
+
+            **D.1 Cross-cutting pattern audit** — specifically look for these high-miss patterns:
+            - Did the diff introduce behavior observable from MULTIPLE routes/modules (e.g. shared
+              middleware, global error handler, cross-cutting logging, shared UI component behavior)?
+              If so, a shared/architecture SKILL file MUST be updated. Missing → ❌.
+            - Did the diff add, rename, or remove an environment variable or config key?
+              The corresponding `env-vars/SKILL.md` or config SKILL MUST reflect it. Missing → ❌.
+            - Did the diff change CI workflow, label semantics, or prompt text in any
+              `.github/workflows/` file? The CI-related SKILL MUST reflect the new behavior. Missing → ❌.
+
+            **D.2 Issue Q&A capture check** — re-read the source issue's Q&A comments and thread.
+            For each key technical decision agreed upon (architecture choice, tool selection,
+            integration pattern, security rule, naming convention, performance trade-off):
+            - Verify it is now discoverable from a SKILL file alone — i.e. someone reading only
+              the SKILL files can find this decision without having to re-read the issue.
+            - Not captured in any SKILL file → ❌.
+
+            **D.3 PR body `## Skills Updated` check** — locate this section in the PR body.
+            - It MUST either (a) list every SKILL file changed, one per bullet, OR (b) enumerate
+              each layer touched and justify why no SKILL update was needed for that layer.
+            - A bare "no skill updates required" without per-layer justification → ❌.
+            - Section missing entirely → ❌.
+
+            Dimension D verdict:
+            - **PASS** — every touched layer with an existing SKILL has ✅ or convincing ⚠️; D.2
+              and D.3 checks pass
+            - **FAIL** — any ❌ in the layer walk, D.1, D.2, or D.3
+            - **N/A** — `.cursor/skills/` directory does not exist in the repo
 
             **E. Code Quality**
             - Validation at external boundaries?
@@ -366,16 +474,50 @@ jobs:
               call the tool and compare against the PR diff.
 
             **G. Clean Code & Standard Compliance**
-            - If `.cursor/skills/clean-code/SKILL.md` exists, walk the diff for violations documented there.
-            - If the SKILL file does not exist, apply general clean code principles appropriate to the
-              languages observed in the diff (inferred from file extensions and syntax). Do NOT apply
-              language-specific rules (e.g. TypeScript `any`, `console.*`, floating promises) unless
-              the project's CLAUDE.md or SKILL files explicitly mention them.
-            - Universal checks regardless of language:
-              - Functions should be small and focused (flag if excessively long given the language norms)
-              - No magic literals without named constants
-              - No credentials, tokens, or sensitive data hardcoded
-              - Drive-by reformatting mixed with feature changes
+
+            Walk the PR diff and cite file + line for each violation found.
+            If `.cursor/skills/clean-code/SKILL.md` exists, apply its rules in addition to the
+            sub-dimensions below. If CLAUDE.md specifies language conventions, those take precedence.
+
+            **G.1 — Language / type safety** (apply rules appropriate to the detected language)
+            - Untyped or loosely-typed values at module boundaries without justification → ❌
+              (e.g. TypeScript `any`/`as any`; Python untyped public API; Java raw types)
+            - Non-null / non-optional assertion without an obvious control-flow guarantee → ❌
+            - Missing explicit return type on exported/public functions → ⚠️
+
+            **G.2 — Function shape**
+            - Function > 50 lines (signature + body + closing brace) and not a pure data mapper → ❌
+            - > 4 positional parameters without an options-object refactor → ❌
+            - Cyclomatic complexity > 10 (count: `if`, `else if`, `&&`, `||`, `?:`, `case`, `catch`) → ❌
+            - Nesting depth > 3 (`if`/`for`/`try`) without guard-clause flattening → ❌
+            - Flag arguments (e.g. `doThing(true)` style) → ❌
+            - Parameter mutation (`param.field = …` inside a function) → ❌
+
+            **G.3 — Naming**
+            - Single-letter names outside ≤ 5-line loops → ❌
+            - Boolean variable not named as a predicate (`isX`/`hasX`/`canX`/`shouldX`) → ❌
+            - Magic literals (non-trivial numbers or strings) without named constant → ❌
+            - Vague suffix: `Manager`/`Helper`/`Util`/`Data`/`Info` where a concrete role exists → ⚠️
+
+            **G.4 — Error handling & async**
+            - `catch` block that neither logs with context nor rethrows/maps the error → ❌
+            - Debug / temporary logging statements left in production code → ❌
+            - Floating promise (no `await`, no `.catch()`, not returned) → ❌
+            - `await` inside a sequential loop over independent items where parallel execution
+              would be correct → ❌
+
+            **G.5 — Refactor protocol**
+            - Drive-by reformatting or renaming mixed into a feature PR → ❌
+            - PR diff > 800 LOC without a Planner-issued sub-milestone justification → ⚠️
+            - Removed tests without a same-PR replacement or explicit explanation → ❌
+
+            **G — Credentials & secrets (universal, always check)**
+            - Hardcoded credentials, tokens, API keys, or sensitive data → ❌
+
+            Dimension G verdict:
+            - **PASS** — no ❌ items; ⚠️ items documented and acceptable
+            - **FAIL** — ANY ❌ item, OR more than 3 ⚠️ items without justification
+            - In OBSERVATION MODE: report ❌s and ⚠️s as informational; do not block
 
             6. Post your evaluation as a PR comment with overall verdict (NORMAL MODE only):
                ✅ APPROVE / 🔄 CHANGES REQUESTED / ❌ REJECT
@@ -383,8 +525,11 @@ jobs:
             **Verdict aggregation:**
             - Any ❌ in A (Runtime) → 🔄 CHANGES REQUESTED
             - Any ❌ in B (Requirements) → 🔄 CHANGES REQUESTED
-            - Dimension D FAIL → 🔄 CHANGES REQUESTED (skip if D is N/A)
-            - Dimension G FAIL (any ❌ item) → 🔄 CHANGES REQUESTED
+            - Dimension D FAIL (layer walk, D.1, D.2, or D.3) → 🔄 CHANGES REQUESTED (skip if D is N/A)
+            - Dimension G FAIL (any ❌ item, or > 3 ⚠️ without justification) → 🔄 CHANGES REQUESTED
+            - C or E structural violation → 🔄 CHANGES REQUESTED; advisory only → ✅ APPROVE
+            - ❌ REJECT reserved for PRs that ignore the Sprint Contract entirely or introduce
+              clearly out-of-scope changes
             - Otherwise: ✅ APPROVE
 
             7. **After posting, apply labels (NORMAL MODE only):**

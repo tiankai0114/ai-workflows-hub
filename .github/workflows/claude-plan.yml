@@ -163,8 +163,18 @@ jobs:
             3. Based on the issue content AND all comments, identify affected domains and read
                those SKILL files if they exist.
             4. Perform impact analysis: which sub-projects, directories, and components are affected
-            5. Identify any **open questions** — raise a question for ANY ambiguity, design decision,
-               or feature mentioned in the issue that is NOT explicitly required by the acceptance criteria.
+            5. Identify any **open questions** — raise a question for ANY of the following:
+               - Ambiguity in requirements or acceptance criteria
+               - Design decisions with multiple valid approaches
+               - **Feature, behavior, approach, or technical choice mentioned ANYWHERE in the
+                 issue body or comments that is NOT explicitly required by the acceptance criteria**
+                 — even if the author frames it as a "note", "consideration", "alternative", or
+                 "we might also…". These are the highest-value questions because they define what
+                 is explicitly OUT of scope. Without an explicit exclusion the Generator may
+                 implement the mentioned item as speculative scope creep.
+                 Example: if the issue says "We might also add caching…" but the AC only requires
+                 a new endpoint — raise: "Caching is mentioned but not in the AC. Should it be
+                 included? If not, we should explicitly exclude it."
 
             ## Figma references
 
@@ -189,13 +199,18 @@ jobs:
 
             You MUST output FORMAT A. FORMAT B is not allowed in Iteration 1.
 
-            **FORMAT A — Required for ALL cases:**
+            **FORMAT A — Required for ALL cases (with OR without open questions):**
 
             ## ❓ Open Questions (Iteration 1)
 
             The following questions need to be resolved before finalizing the plan:
 
             1. **[Short title]** — [Detailed question with context]
+
+            **Explicitly excluded** — The following were mentioned in the issue body or comments but
+            are NOT in the acceptance criteria and will NOT be implemented:
+            - `featureX` — mentioned as "might also…" in the issue; out of scope for this milestone
+            - Write "None — issue body contains no mentions outside the acceptance criteria." if empty
 
             **If you have NO open questions**, still post FORMAT A with the `<!-- NO_OPEN_QUESTIONS -->` marker:
 
@@ -204,13 +219,20 @@ jobs:
             <!-- NO_OPEN_QUESTIONS -->
             No open questions identified. Proceeding to plan.
 
-            - **Scope confirmation** — [Brief confirmation]
-            - **Explicitly excluded** — [List every feature mentioned but NOT in the AC. Write "None" if empty.]
+            - **Scope confirmation** — [Brief confirmation that requirements are unambiguous]
+            - **Explicitly excluded** — [MANDATORY — list every feature/behavior/approach mentioned
+              anywhere in the issue body or comments that is NOT in the acceptance criteria, together
+              with a one-line justification. This list is the Generator's explicit scope boundary.
+              Write "None — issue body contains no mentions outside the acceptance criteria." if truly
+              nothing was mentioned. A missing or empty Explicitly excluded section is a Planner
+              protocol violation.]
 
             ## Rules
             - You MUST post via `gh issue comment`
             - Your post MUST start with `## ❓ Open Questions`
             - FORMAT B (the final plan) is NOT allowed in Iteration 1
+            - **Explicitly excluded** is MANDATORY in every Iteration 1 output — even when you have
+              open questions. If the list is empty, write "None".
             - Stay high-level. Define WHAT, not HOW.
             - Do NOT create PRs or write code.
             - Add appropriate `pge/scope:` and `pge/domain:` labels to the issue.
@@ -256,15 +278,44 @@ jobs:
             Read CLAUDE.md, `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
             and the relevant sub-project SKILL files to ground your answers.
 
-            For each question, provide a recommended answer. Default to EXCLUDE for scope-inclusion questions.
+            ## Verdict framework — assign ONE of three verdicts to every question
+
+            **❌ EXCLUDE** — The feature/behavior/approach is NOT in the acceptance criteria and should
+            NOT be implemented in this issue. Use this as the default for any scope-inclusion question
+            where the AC does not explicitly require it. Generator treats ❌ as a hard scope boundary.
+
+            **✅ INCLUDE** — The feature/behavior IS clearly required by the AC or is logically
+            necessary (without it the AC cannot be satisfied). Must cite the specific AC item.
+            Include brief implementation guidance (1–3 bullets, WHAT not HOW).
+
+            **🔶 CLARIFY** — Genuinely ambiguous: reasonable engineers disagree AND it materially
+            changes scope or architecture. Use sparingly — prefer a defensible EXCLUDE over a CLARIFY.
+            When you use CLARIFY, post a focused question to the issue thread so the human author
+            can decide. Do NOT leave the Planner waiting for an answer that may never come.
+
+            **Tiebreaker rules:**
+            - If in doubt between EXCLUDE and CLARIFY → use EXCLUDE.
+            - If in doubt between INCLUDE and CLARIFY → use CLARIFY.
+            - Never leave a verdict blank.
+
+            ## Output format
 
             **CRITICAL:** Post your output using `gh issue comment`:
             ```bash
             cat > /tmp/advisor-output.md << 'ADVISOR_EOF'
             ## 💡 Recommended Answers (Iteration 1)
 
-            1. **[Short title]** — **Recommendation:** [Your recommended approach]
-               - *Rationale:* [Why this is the best choice]
+            1. **[Short title]**
+               - **Verdict:** ❌ EXCLUDE | ✅ INCLUDE | 🔶 CLARIFY
+               - **Rationale:** [1–2 sentences — cite AC item number or "not mentioned in AC"]
+               - **If INCLUDE — implementation hints:** [1–3 bullets, WHAT not HOW; omit for EXCLUDE/CLARIFY]
+               - **If CLARIFY — question for author:** [Exact question to post; omit for EXCLUDE/INCLUDE]
+
+            ---
+            **Summary table**
+            | # | Question | Verdict |
+            |---|----------|---------|
+            | 1 | [Short title] | ❌ EXCLUDE |
             ADVISOR_EOF
             gh issue comment ${{ env.ISSUE_NUMBER }} --body-file /tmp/advisor-output.md
             ```
@@ -324,6 +375,14 @@ jobs:
             ### Resolved Questions
             - [Summary of each question and the chosen answer]
 
+            ### Explicitly excluded
+            The following were mentioned in the issue or prior Q&A but are NOT in the acceptance
+            criteria and will NOT be implemented:
+            - `featureX` — mentioned as "might also…"; Advisor verdict ❌ EXCLUDE
+            - Write "None — no out-of-scope items mentioned." if truly nothing was mentioned.
+            *This section is the Generator's hard scope boundary. Any item not listed here
+            and not in the Sprint Contract is implicitly excluded.*
+
             <!-- MILESTONES_START -->
             ### Milestones
             #### Milestone 1 — `{scope}`: {title}
@@ -377,10 +436,46 @@ jobs:
             The latest comment contains open questions (iteration 2).
 
             Read CLAUDE.md, `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
-            and relevant SKILL files. For each question, provide a recommended answer.
-            Default to EXCLUDE for scope-inclusion questions.
+            and relevant SKILL files to ground your answers.
 
-            Post output via `gh issue comment` with header `## 💡 Recommended Answers (Iteration 2)`.
+            ## Verdict framework — assign ONE of three verdicts to every question
+
+            **❌ EXCLUDE** — The feature/behavior/approach is NOT in the acceptance criteria and should
+            NOT be implemented. Default for any scope-inclusion question not explicitly in the AC.
+            Generator treats ❌ as a hard scope boundary.
+
+            **✅ INCLUDE** — Clearly required by the AC or logically necessary. Must cite the specific
+            AC item. Include brief implementation guidance (1–3 bullets, WHAT not HOW).
+
+            **🔶 CLARIFY** — Genuinely ambiguous AND materially changes scope/architecture. Use
+            sparingly — prefer a defensible EXCLUDE. When used, post a focused question so the human
+            author can decide. By iteration 2 this should be rare; the Planner MUST produce a plan
+            in the next step regardless.
+
+            **Tiebreaker rules:**
+            - If in doubt between EXCLUDE and CLARIFY → use EXCLUDE.
+            - If in doubt between INCLUDE and CLARIFY → use CLARIFY.
+            - Never leave a verdict blank.
+
+            Post output via `gh issue comment` with the following format:
+            ```bash
+            cat > /tmp/advisor-output.md << 'ADVISOR_EOF'
+            ## 💡 Recommended Answers (Iteration 2)
+
+            1. **[Short title]**
+               - **Verdict:** ❌ EXCLUDE | ✅ INCLUDE | 🔶 CLARIFY
+               - **Rationale:** [1–2 sentences — cite AC item or "not mentioned in AC"]
+               - **If INCLUDE — implementation hints:** [1–3 bullets; omit for EXCLUDE/CLARIFY]
+               - **If CLARIFY — question for author:** [Exact question; omit for EXCLUDE/INCLUDE]
+
+            ---
+            **Summary table**
+            | # | Question | Verdict |
+            |---|----------|---------|
+            | 1 | [Short title] | ❌ EXCLUDE |
+            ADVISOR_EOF
+            gh issue comment ${{ env.ISSUE_NUMBER }} --body-file /tmp/advisor-output.md
+            ```
 
       # ══════════════════════════════════════════════════════════════
       # Iteration 3 — Final (must produce plan)
@@ -404,19 +499,44 @@ jobs:
 
             Read issue #${{ env.ISSUE_NUMBER }} and ALL its comments
             (`gh issue view ${{ env.ISSUE_NUMBER }} --comments --repo ${{ env.GH_REPO }}`).
-            You MUST post the final plan now.
 
             Read CLAUDE.md, `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
             and the relevant sub-project SKILL files.
 
+            ## Two scenarios — pick the one that applies
+
+            **Scenario A — Advisor answers from iterations 1–2 are sufficient (most common):**
+            The prior Advisor comment resolved all questions and you have everything needed to
+            write the plan. Skip any further Q&A. Post the final `## 📋 Planner Analysis` now.
+            Use the Advisor's EXCLUDE verdicts to populate the `Explicitly excluded` section and
+            its INCLUDE verdicts to confirm scope.
+
+            **Scenario B — A genuinely NEW critical question emerged while reading the comments:**
+            This is rare. Use it ONLY when an issue that was NOT raised in iterations 1–2 would
+            materially change architecture or scope and cannot be resolved by defaulting to EXCLUDE.
+            In this case:
+            1. Post `## ❓ Open Questions (Iteration 3 — final round)` with the new question(s).
+            2. **In the same turn**, immediately post a follow-up comment with your best-effort
+               plan using the EXCLUDE default for unresolved items. Label it:
+               `## 📋 Planner Analysis (provisional — pending Iteration 3 answers)`.
+            You MUST produce the plan in this step. An open-questions comment alone is NOT
+            acceptable — this run has no further iterations.
+
             The final `### Skills Referenced` MUST include the two baselines AND every touched
             sub-project's `development-standard/SKILL.md`.
 
-            **CRITICAL:** Post via `gh issue comment` using the exact HTML comment markers:
+            **CRITICAL:** Post the final plan via `gh issue comment` using the exact HTML comment markers:
             ```bash
             cat > /tmp/planner-output.md << 'PLAN_EOF'
             ## 📋 Planner Analysis
             ...
+
+            ### Explicitly excluded
+            The following were mentioned in the issue or prior Q&A but are NOT in the acceptance
+            criteria and will NOT be implemented:
+            - `featureX` — Advisor verdict ❌ EXCLUDE (or defaulted to EXCLUDE)
+            - Write "None — no out-of-scope items mentioned." if truly nothing was mentioned.
+
             <!-- MILESTONES_START -->
             ### Milestones
             #### Milestone 1 — `{scope}`: {title}
