@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# =============================================================================
+# pge-verify.sh — Consumer verification script template for ai-workflows-hub
+# =============================================================================
+#
+# HOW TO USE
+# ----------
+# 1. Copy this file to your repository at:
+#       .github/scripts/pge-verify.sh
+# 2. Customise the sections below to match your project's build/lint/test needs.
+# 3. The file is automatically detected and executed by the PGE Evaluator before
+#    Claude reviews the PR.
+#
+# CONTRACT
+# --------
+# - Exit 0  → all checks passed; Evaluator proceeds normally.
+# - Exit 1  → one or more checks failed; Evaluator is BLOCKED and the PR is
+#             labelled pge/pr:needs-rework automatically.
+#
+# ENVIRONMENT VARIABLES (injected by the hub)
+# --------------------------------------------
+# PR_NUMBER    – Pull request number (string)
+# CHANGED_PATHS – Newline-separated list of files changed in the PR
+# GH_TOKEN     – GitHub token with read access (use gh CLI commands if needed)
+#
+# NOTES
+# -----
+# - The script runs inside the checked-out PR branch, so all source files are
+#   available at their expected paths.
+# - Keep checks fast. Slow checks delay the Evaluator and consume Actions
+#   minutes. Prefer incremental/affected-only invocations where possible.
+# - For monorepos, detect which sub-projects are touched via CHANGED_PATHS and
+#   only run the relevant build/lint commands.
+# =============================================================================
+
+set -euo pipefail
+
+echo "=== PGE Verify: starting ==="
+
+# ── Detect which sub-projects are affected ─────────────────────────────────
+# Adapt the paths below to your repository layout.
+
+CHANGED_PROJECTS=()
+
+while IFS= read -r path; do
+  case "$path" in
+    frontend/*)  [[ " ${CHANGED_PROJECTS[*]} " != *" frontend "* ]] && CHANGED_PROJECTS+=("frontend") ;;
+    backend/*)   [[ " ${CHANGED_PROJECTS[*]} " != *" backend "* ]]  && CHANGED_PROJECTS+=("backend") ;;
+    # add more sub-projects here …
+  esac
+done <<< "$CHANGED_PATHS"
+
+echo "Affected sub-projects: ${CHANGED_PROJECTS[*]:-none detected}"
+
+# ── Run checks per affected sub-project ────────────────────────────────────
+
+FAILED=0
+
+for project in "${CHANGED_PROJECTS[@]}"; do
+  echo ""
+  echo "--- Verifying: $project ---"
+
+  pushd "$project" > /dev/null
+
+  # TypeScript / JavaScript example
+  # --------------------------------
+  if [ -f "package.json" ]; then
+    echo "Running lint…"
+    npm run lint --if-present || { echo "❌ lint failed in $project"; FAILED=1; }
+
+    echo "Running build…"
+    npm run build --if-present || { echo "❌ build failed in $project"; FAILED=1; }
+
+    echo "Running unit tests…"
+    npm run test:unit --if-present || { echo "❌ unit tests failed in $project"; FAILED=1; }
+  fi
+
+  # Java / Gradle example
+  # ----------------------
+  # if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+  #   ./gradlew check || { echo "❌ Gradle check failed in $project"; FAILED=1; }
+  # fi
+
+  # Python example
+  # ---------------
+  # if [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+  #   python -m pytest tests/ -q || { echo "❌ pytest failed in $project"; FAILED=1; }
+  # fi
+
+  popd > /dev/null
+done
+
+# ── Root-level checks (optional) ───────────────────────────────────────────
+# Uncomment if your project has root-level scripts.
+
+# echo ""
+# echo "--- Root checks ---"
+# npm run typecheck --if-present || { echo "❌ root typecheck failed"; FAILED=1; }
+
+echo ""
+if [ "$FAILED" -eq 0 ]; then
+  echo "=== PGE Verify: ✅ all checks passed ==="
+else
+  echo "=== PGE Verify: ❌ one or more checks failed ==="
+  exit 1
+fi
