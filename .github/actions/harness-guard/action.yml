@@ -26,6 +26,10 @@ inputs:
     description: 'Path to write harness-summary.json'
     required: false
     default: 'harness-summary.json'
+  gitleaks_version:
+    description: 'Pinned Gitleaks version to install'
+    required: false
+    default: '8.30.1'
 
 outputs:
   status:
@@ -47,11 +51,64 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Install Gitleaks
+      shell: bash
+      env:
+        GITLEAKS_VERSION: ${{ inputs.gitleaks_version }}
+      run: |
+        set -euo pipefail
+
+        version="${GITLEAKS_VERSION#v}"
+        install_dir="$RUNNER_TEMP/harness-guard/bin"
+        mkdir -p "$install_dir"
+
+        if [ "${RUNNER_OS}-${RUNNER_ARCH}" != "Linux-X64" ]; then
+          echo "::error::Harness Guard only supports Gitleaks installation on Linux-X64 runners."
+          echo "::error::Current runner platform: ${RUNNER_OS}-${RUNNER_ARCH}"
+          exit 1
+        fi
+
+        archive="gitleaks_${version}_linux_x64.tar.gz"
+        url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
+        curl -fsSL "$url" -o "$RUNNER_TEMP/harness-guard/$archive"
+        tar -xzf "$RUNNER_TEMP/harness-guard/$archive" -C "$install_dir" gitleaks
+        chmod +x "$install_dir/gitleaks"
+        "$install_dir/gitleaks" version
+        echo "$install_dir" >> "$GITHUB_PATH"
+
+    - name: Run Gitleaks secret scan
+      shell: bash
+      env:
+        GITLEAKS_REPORT_PATH: ${{ runner.temp }}/harness-guard/gitleaks-report.json
+      run: |
+        set -euo pipefail
+
+        mkdir -p "$(dirname "$GITLEAKS_REPORT_PATH")"
+        rm -f "$GITLEAKS_REPORT_PATH"
+
+        set +e
+        gitleaks detect \
+          --source . \
+          --no-git \
+          --report-format json \
+          --report-path "$GITLEAKS_REPORT_PATH" \
+          --no-banner
+        exit_code=$?
+        set -e
+
+        if [ "$exit_code" -eq 0 ] || [ "$exit_code" -eq 1 ]; then
+          exit 0
+        fi
+
+        echo "::error::Gitleaks scan failed with exit code $exit_code."
+        exit "$exit_code"
+
     - name: Run deterministic Harness checks
       id: guard
       uses: actions/github-script@v7
       env:
         BOT_NAME: ${{ inputs.bot_name }}
+        GITLEAKS_REPORT_PATH: ${{ runner.temp }}/harness-guard/gitleaks-report.json
         MAX_CHANGED_FILES: ${{ inputs.max_changed_files }}
         MAX_DIFF_LINES: ${{ inputs.max_diff_lines }}
         SUMMARY_PATH: ${{ inputs.summary_path }}
@@ -167,8 +224,6 @@ runs:
             { code: 'PRIVATE_KEY_DETECTED', pattern: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |)?PRIVATE KEY-----/ },
             { code: 'GITHUB_TOKEN_DETECTED', pattern: /gh[pousr]_[A-Za-z0-9_]{36,}/ },
             { code: 'AWS_ACCESS_KEY_DETECTED', pattern: /AKIA[0-9A-Z]{16}/ },
-            { code: 'SLACK_TOKEN_DETECTED', pattern: /xox[baprs]-[A-Za-z0-9-]{10,}/ },
-            { code: 'GENERIC_SECRET_ASSIGNMENT', pattern: /(api[_-]?key|secret|token|password)\s*[:=]\s*['\"][^'\"\s]{16,}['\"]/i },
           ];
 
           const scanText = (text, filename) => {
@@ -189,6 +244,26 @@ runs:
           scanText(pr.body || '', 'PR body');
           for (const file of files) {
             scanText(file.patch || '', file.filename);
+          }
+
+          const gitleaksReportPath = process.env.GITLEAKS_REPORT_PATH || '';
+          if (gitleaksReportPath && fs.existsSync(gitleaksReportPath)) {
+            const reportText = fs.readFileSync(gitleaksReportPath, 'utf8').trim();
+            const gitleaksFindings = reportText ? JSON.parse(reportText) : [];
+            for (const finding of gitleaksFindings) {
+              const filePath = finding.File || 'unknown file';
+              const ruleId = finding.RuleID || 'unknown-rule';
+              addFinding(
+                'blocking',
+                'GITLEAKS_SECRET_DETECTED',
+                `Gitleaks detected ${ruleId} in ${filePath}.`,
+                {
+                  path: filePath,
+                  rule: ruleId,
+                  line: finding.StartLine,
+                },
+              );
+            }
           }
 
           const blockingFindings = findings.filter((finding) => finding.severity === 'blocking').length;
