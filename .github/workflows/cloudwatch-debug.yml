@@ -304,7 +304,7 @@ jobs:
             exit 0
           fi
 
-          FINGERPRINT=$(cat /tmp/claude-analysis.json | jq -r '.fingerprint // ""' 2>/dev/null || echo "")
+          FINGERPRINT=$(jq -r '.fingerprint // ""' /tmp/claude-analysis.json 2>/dev/null || echo "")
           if [ -z "${FINGERPRINT}" ]; then
             echo "skip=false" >> "${GITHUB_OUTPUT}"
             exit 0
