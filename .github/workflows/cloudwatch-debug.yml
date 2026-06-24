@@ -174,10 +174,10 @@ jobs:
 
           echo "Querying ${LOG_GROUP} for '${FILTER_PATTERN}' in last ${OFFSET_MINUTES} minutes..."
 
-          # Build optional stream prefix arg
-          STREAM_ARG=""
+          # Build optional stream prefix args.
+          STREAM_ARGS=()
           if [ -n "${LOG_STREAM_PREFIX}" ]; then
-            STREAM_ARG="--log-stream-name-prefix ${LOG_STREAM_PREFIX}"
+            STREAM_ARGS=(--log-stream-name-prefix "${LOG_STREAM_PREFIX}")
           fi
 
           # Fetch filtered log events
@@ -188,7 +188,7 @@ jobs:
             --start-time "${START_TIME}" \
             --end-time "${END_TIME}" \
             --limit "${MAX_EVENTS}" \
-            ${STREAM_ARG} \
+            "${STREAM_ARGS[@]}" \
             --output json 2>&1) || true
 
           EVENT_COUNT=$(echo "${RAW}" | jq '.events | length' 2>/dev/null || echo "0")
@@ -284,9 +284,11 @@ jobs:
         id: no-logs
         if: steps.fetch-logs.outputs.logs_available != 'true'
         run: |
-          echo "exceptions_found=false" >> "$GITHUB_OUTPUT"
-          echo "severity=none" >> "$GITHUB_OUTPUT"
-          echo "summary=" >> "$GITHUB_OUTPUT"
+          {
+            echo "exceptions_found=false"
+            echo "severity=none"
+            echo "summary="
+          } >> "$GITHUB_OUTPUT"
           echo "ℹ️ No matching log events found — skipping analysis"
 
       - name: Check deduplication window
@@ -311,8 +313,10 @@ jobs:
           # Use GitHub Actions cache key approach via a sentinel comment on the run
           # Simple approach: check if Actions cache has this fingerprint (requires cache permissions)
           # For now, always proceed — consumers can implement custom dedup via their own step
-          echo "skip=false" >> "${GITHUB_OUTPUT}"
-          echo "fingerprint=${FINGERPRINT}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "skip=false"
+            echo "fingerprint=${FINGERPRINT}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Read Claude analysis
         id: read-analysis
@@ -328,9 +332,11 @@ jobs:
           SEVERITY=$(jq -r '.severity // "medium"' /tmp/claude-analysis.json)
           COMPONENT=$(jq -r '.affected_component // "unknown"' /tmp/claude-analysis.json)
 
-          echo "summary=${SUMMARY}" >> "${GITHUB_OUTPUT}"
-          echo "severity=${SEVERITY}" >> "${GITHUB_OUTPUT}"
-          echo "component=${COMPONENT}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "summary=${SUMMARY}"
+            echo "severity=${SEVERITY}"
+            echo "component=${COMPONENT}"
+          } >> "${GITHUB_OUTPUT}"
 
           # Write description to file (may contain newlines)
           echo "${DESCRIPTION}" > /tmp/issue-description.txt
@@ -379,13 +385,15 @@ jobs:
           FOUND="${{ steps.analyze.outputs.exceptions_found || 'false' }}"
           SEVERITY="${{ steps.analyze.outputs.severity || 'none' }}"
           SUMMARY="${{ steps.analyze.outputs.summary || 'N/A' }}"
-          echo "## CloudWatch Debug Summary" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Key | Value |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "|-----|-------|" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Log group | \`${{ inputs.log_group }}\` |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Filter | \`${{ inputs.filter_pattern }}\` |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Events found | ${{ steps.fetch-logs.outputs.event_count || '0' }} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Exceptions found | ${FOUND} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Severity | ${SEVERITY} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Summary | ${SUMMARY} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Handler | ${{ inputs.handler }} |" >> "${GITHUB_STEP_SUMMARY}"
+          {
+            echo "## CloudWatch Debug Summary"
+            echo "| Key | Value |"
+            echo "|-----|-------|"
+            echo "| Log group | \`${{ inputs.log_group }}\` |"
+            echo "| Filter | \`${{ inputs.filter_pattern }}\` |"
+            echo "| Events found | ${{ steps.fetch-logs.outputs.event_count || '0' }} |"
+            echo "| Exceptions found | ${FOUND} |"
+            echo "| Severity | ${SEVERITY} |"
+            echo "| Summary | ${SUMMARY} |"
+            echo "| Handler | ${{ inputs.handler }} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
