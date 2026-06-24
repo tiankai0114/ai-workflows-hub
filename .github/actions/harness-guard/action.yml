@@ -114,10 +114,10 @@ runs:
           const isBlockingProtectedPath = (filePath) => {
             const lower = filePath.toLowerCase();
             const base = path.basename(lower);
+            const allowedEnvTemplates = new Set(['.env.example', '.env.sample', '.env.template']);
+            const isEnvFile = base === '.env' || base.startsWith('.env.');
             return (
-              base.startsWith('.env') ||
-              lower === 'gradle.properties' ||
-              lower.endsWith('/gradle.properties') ||
+              (isEnvFile && !allowedEnvTemplates.has(base)) ||
               lower.includes('secret') ||
               lower.includes('credential')
             );
