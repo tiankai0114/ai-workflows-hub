@@ -230,22 +230,72 @@ jobs:
             Your task:
             1. If `CLAUDE.md` exists at the repo root, read it for architecture rules and build commands.
                If it does not exist, infer from the project structure and proceed.
-            2. If `.cursor/skills/` exists, read the relevant baseline skills before writing any code:
-               - `.cursor/skills/clean-code/SKILL.md` (if it exists)
-               - `.cursor/skills/refactor/SKILL.md` (if it exists)
-               - The touched sub-project's `development-standard/SKILL.md` (if it exists)
-               If the directory does not exist, skip this step — do NOT waste turns reading
-               non-existent files.
+            2. Read the baseline SKILL files — these are NON-NEGOTIABLE when they exist.
+               If `.cursor/skills/` directory does NOT exist, skip this entire step and proceed.
+               If it does exist, read ALL of the following that are present before writing any code:
+               - `.cursor/skills/clean-code/SKILL.md` — universal quality baseline
+               - `.cursor/skills/refactor/SKILL.md` — refactor protocol (applies even to incidental
+                 refactors inside a feature PR)
+               - The touched sub-project's `development-standard/SKILL.md`
+               These baselines bind your output regardless of what the Planner listed. When a
+               sub-project's standard conflicts with a baseline, the sub-project wins (more specific).
+               When silent, the baseline binds.
             3. Find the **latest** Planner comment (contains `<!-- MILESTONES_START -->`)
             4. Locate **Milestone ${{ steps.milestone.outputs.number }}** and its Sprint Contract
                (between `<!-- SPRINT_CONTRACT_START -->` and `<!-- SPRINT_CONTRACT_END -->`)
             5. Implement ONLY the changes for this milestone
-            6. Follow coding standards from SKILL files (if they exist) or from CLAUDE.md conventions
+            6. **Follow these universal coding standards** regardless of language/framework.
+               Apply to every file you write or modify:
+
+               **Function shape**
+               - Functions ≤ 50 lines (signature + body + closing brace)
+               - ≤ 4 positional parameters — use an options object for more
+               - Cyclomatic complexity ≤ 10 (count: if, else if, &&, ||, ?:, case, catch)
+               - Nesting depth ≤ 3 (if/for/try) — use guard clauses to flatten
+
+               **Naming**
+               - No single-letter names outside ≤ 5-line loops
+               - Booleans named as predicates: `isX` / `hasX` / `canX` / `shouldX`
+               - No magic literals — use named constants
+
+               **Error handling & async**
+               - Never swallow errors silently in a catch block
+               - No debug logging statements left in production code
+               - No floating promises (always await, .catch(), or return)
+
+               **Refactor protocol**
+               - No drive-by reformatting mixed into a feature PR
+               - If a PR exceeds 800 LOC, raise this as a concern in the PR body
+
+               If `.cursor/skills/clean-code/SKILL.md` exists, apply its rules in addition to the
+               above. If CLAUDE.md specifies language-specific conventions, those take precedence.
+
             7. Follow architecture rules from CLAUDE.md (if it exists)
             8. Run verification on affected sub-projects — if CLAUDE.md specifies build/test commands,
                use them; otherwise use the standard build tool for the detected language/framework
-            9. If `.cursor/skills/` directory exists, update the relevant SKILL files to reflect
-               any new patterns or behaviors introduced by your changes. If it does not exist, skip.
+            9. **SKILL update obligation**: if `.cursor/skills/` directory does NOT exist, skip
+               this step entirely. If it does exist, walk the per-layer matrix below for every
+               file you modified and update the matching SKILL file. Do not leave new patterns
+               undocumented — missing updates will be flagged by the Evaluator as Dimension D ❌.
+
+               **Per-layer SKILL update matrix**
+               | Layer touched | SKILL file to update |
+               |---|---|
+               | API routes / controllers / services | `<subproject>/.cursor/skills/api/SKILL.md` or `development-standard/SKILL.md` |
+               | UI / frontend components / pages | `<subproject>/.cursor/skills/ui/SKILL.md` or `development-standard/SKILL.md` |
+               | Shared utilities / middleware / cross-cutting | `.cursor/skills/architecture/SKILL.md` or the closest shared SKILL |
+               | Environment variables or config keys (add/rename/remove) | `.cursor/skills/env-vars/SKILL.md` or the sub-project config SKILL |
+               | CI workflows / GitHub Actions / label semantics | `.cursor/skills/ci/SKILL.md` or the closest CI SKILL |
+               | New code-quality pattern introduced | `.cursor/skills/clean-code/SKILL.md` |
+               | Refactor touching existing structure | `.cursor/skills/refactor/SKILL.md` |
+
+               For each row that applies: if the SKILL file exists → update it. If no matching
+               SKILL file exists for a layer → add a `⚠️ SKILL gap` note in the PR body under
+               `## Skills Updated` listing the layer and the pattern that needs future documentation.
+
+               The `## Skills Updated` section in the PR body MUST either (a) list every SKILL
+               file changed, one per bullet, OR (b) enumerate each layer touched and justify why
+               no SKILL update was needed for that layer.
             10. Create a PR with:
                 - Title: `[Milestone ${{ steps.milestone.outputs.number }}/${{ steps.milestone.outputs.total }}] {feature title} (#${{ github.event.issue.number }})`
                 - Body with: summary, this milestone's Sprint Contract checklist, skills updated
@@ -458,16 +508,25 @@ jobs:
                Read that issue's latest Planner Analysis comment.
             2. Read the Sprint Contract. This is the ONLY authoritative list of what this PR delivers.
             3. Diff current branch: `git diff origin/${{ steps.pr-info.outputs.base_ref }}...HEAD --name-only`
-               For every file, verify it is required by the Sprint Contract.
+               For every file listed: if it is NOT required by the Sprint Contract, it **MUST be
+               reverted** — do not merely comment it out, stub it, or leave it "for later".
+               Out-of-scope files left in the diff will cause the Evaluator to reject again.
 
             ### Step 3 — Read baselines and SKILL files
 
             If `CLAUDE.md` exists, read it and any SKILL files referenced in the Evaluator feedback.
-            If `.cursor/skills/` exists, re-read the relevant files:
-            `.cursor/skills/clean-code/SKILL.md`, `.cursor/skills/refactor/SKILL.md`,
-            and the touched sub-project's `development-standard/SKILL.md` (only if they exist).
-            If none of these files exist, skip this step and apply general best practices
-            appropriate to the language/framework detected from the codebase.
+            If `.cursor/skills/` directory exists, re-read the relevant files — these are
+            NON-NEGOTIABLE baselines when they exist:
+            - `.cursor/skills/clean-code/SKILL.md`
+            - `.cursor/skills/refactor/SKILL.md`
+            - The touched sub-project's `development-standard/SKILL.md`
+            If none of these files exist, apply the universal coding standards below and general
+            best practices for the detected language/framework:
+            - Functions ≤ 50 lines, ≤ 4 params, cyclomatic complexity ≤ 10, nesting ≤ 3
+            - Booleans named as predicates (isX/hasX/canX)
+            - No magic literals — named constants only
+            - Errors never swallowed silently; no floating promises
+            - No drive-by reformatting mixed with feature changes
 
             ### Step 4 — Fix ALL issues from the checklist
 
@@ -485,9 +544,24 @@ jobs:
 
             ### Step 7 — SKILL update obligation (only if `.cursor/skills/` exists)
 
-            If `.cursor/skills/` directory exists, update the relevant SKILL files for any new
-            behavior, changed contracts, or revised patterns introduced by your rework.
-            If the directory does not exist, skip this step entirely.
+            If `.cursor/skills/` directory does NOT exist, skip this step entirely.
+            If it does exist, walk the per-layer matrix for every file you modified and
+            update the matching SKILL file. Missing updates will be flagged by the Evaluator
+            as Dimension D ❌ again on the next review cycle.
+
+            **Per-layer SKILL update matrix**
+            | Layer touched | SKILL file to update |
+            |---|---|
+            | API routes / controllers / services | `<subproject>/.cursor/skills/api/SKILL.md` or `development-standard/SKILL.md` |
+            | UI / frontend components / pages | `<subproject>/.cursor/skills/ui/SKILL.md` or `development-standard/SKILL.md` |
+            | Shared utilities / middleware / cross-cutting | `.cursor/skills/architecture/SKILL.md` or the closest shared SKILL |
+            | Environment variables or config keys (add/rename/remove) | `.cursor/skills/env-vars/SKILL.md` or the sub-project config SKILL |
+            | CI workflows / GitHub Actions / label semantics | `.cursor/skills/ci/SKILL.md` or the closest CI SKILL |
+            | New code-quality pattern introduced | `.cursor/skills/clean-code/SKILL.md` |
+            | Refactor touching existing structure | `.cursor/skills/refactor/SKILL.md` |
+
+            For each row that applies: if the SKILL file exists → update it. If no matching SKILL
+            file exists → add a `⚠️ SKILL gap` note in the PR body `## Skills Updated` section.
 
             ### Step 8 — Commit and push
 
