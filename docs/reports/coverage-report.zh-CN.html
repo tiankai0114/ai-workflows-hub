@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ai-workflows-hub · 覆盖率 &amp; 适配方案</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222535;
+      --border: #2e3148;
+      --text: #e2e4f0;
+      --text-muted: #7b80a0;
+      --green: #22c55e;
+      --green-dim: #16a34a33;
+      --yellow: #f59e0b;
+      --yellow-dim: #d9770633;
+      --red: #ef4444;
+      --red-dim: #dc262633;
+      --blue: #6366f1;
+      --blue-dim: #4f46e533;
+      --purple: #a855f7;
+      --purple-dim: #9333ea33;
+      --cyan: #06b6d4;
+      --cyan-dim: #0891b233;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 32px 24px;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      background: #ffffff0f;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--cyan);
+    }
+    pre {
+      background: #11131d;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #c9d1e0;
+      margin-top: 10px;
+    }
+    pre .cm { color: #5a6a8a; }
+    pre .kw { color: #818cf8; }
+    pre .st { color: #86efac; }
+    pre .vr { color: var(--cyan); }
+    pre .fn { color: #fbbf24; }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .header { text-align: center; margin-bottom: 36px; }
+    .header-badge {
+      display: inline-block;
+      background: var(--blue-dim);
+      color: #818cf8;
+      border: 1px solid #4f46e566;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    h1 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+    .header-sub { color: var(--text-muted); font-size: 13px; }
+    .header-sub span { color: var(--cyan); }
+
+    /* ── Section title ───────────────────────────────────────── */
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--text-muted);
+      margin: 36px 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ── Score banner ─────────────────────────────────────────── */
+    .score-banner { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px; }
+    .score-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .score-ring { flex-shrink: 0; position: relative; width: 88px; height: 88px; }
+    .score-ring svg { transform: rotate(-90deg); }
+    .score-ring .ring-bg { fill: none; stroke: var(--border); stroke-width: 7; }
+    .score-ring .ring-fill { fill: none; stroke-width: 7; stroke-linecap: round; }
+    .score-ring .ring-text {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .ring-pct { font-size: 21px; font-weight: 700; line-height: 1; }
+    .ring-label { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+    .score-info h2 { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
+    .score-info p { font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+
+    /* ── Module cards ─────────────────────────────────────────── */
+    .modules { display: flex; flex-direction: column; gap: 10px; }
+    .module-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .module-header {
+      display: grid;
+      grid-template-columns: 22px 1fr auto auto auto;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .module-header:hover { background: var(--surface2); }
+    .module-icon { font-size: 15px; text-align: center; }
+    .module-name { font-weight: 600; font-size: 14px; }
+    .module-weight {
+      font-size: 11px; color: var(--text-muted);
+      background: #ffffff0a; border: 1px solid var(--border);
+      border-radius: 6px; padding: 2px 7px;
+    }
+    .module-pct-badge { font-size: 13px; font-weight: 700; min-width: 44px; text-align: right; }
+    .chevron { color: var(--text-muted); font-size: 10px; transition: transform .2s; }
+    .module-card.open .chevron { transform: rotate(180deg); }
+    .module-bar-wrap { padding: 0 16px 12px; }
+    .module-bar-track { height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .module-bar-fill { height: 100%; border-radius: 99px; }
+    .module-body { border-top: 1px solid var(--border); padding: 14px 16px; display: none; }
+    .module-card.open .module-body { display: block; }
+
+    .item-list { display: flex; flex-direction: column; gap: 7px; }
+    .item-row {
+      display: flex; gap: 9px; align-items: flex-start;
+      padding: 7px 10px; border-radius: 6px; font-size: 13px;
+    }
+    .item-row.done { background: var(--green-dim); }
+    .item-row.warn { background: var(--yellow-dim); }
+    .item-row.skip { background: var(--blue-dim); }
+    .item-row.gap  { background: var(--red-dim); }
+    .item-icon { flex-shrink: 0; width: 17px; text-align: center; margin-top: 1px; }
+    .item-text { flex: 1; }
+    .item-text strong { color: #fff; }
+    .item-text .note { color: var(--text-muted); font-size: 12px; }
+
+    /* ── Adaptation section ───────────────────────────────────── */
+    .adapt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .adapt-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .adapt-card-header {
+      padding: 14px 18px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .adapt-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .adapt-icon.cyan   { background: var(--cyan-dim); }
+    .adapt-icon.purple { background: var(--purple-dim); }
+    .adapt-card-title { font-weight: 700; font-size: 15px; color: #fff; }
+    .adapt-card-sub   { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .adapt-card-body  { padding: 14px 18px; }
+    .adapt-card-body p { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+    .adapt-card-body ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    .adapt-card-body ul li {
+      font-size: 12px;
+      padding-left: 14px;
+      position: relative;
+      color: var(--text-muted);
+    }
+    .adapt-card-body ul li::before { content: '·'; position: absolute; left: 4px; color: var(--cyan); }
+
+    /* ── Mapping table ─────────────────────────────────────────── */
+    .map-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .map-table th {
+      text-align: left;
+      padding: 9px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--text-muted);
+    }
+    .map-table td {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .map-table tr:nth-child(even) td { background: #ffffff03; }
+    .map-table .col-old { color: #f87171; }
+    .map-table .col-new { color: #86efac; }
+    .map-table .col-how { color: var(--text); }
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 99px;
+      font-size: 11px; font-weight: 600;
+    }
+    .pill-cyan   { background: var(--cyan-dim);   color: var(--cyan); }
+    .pill-purple { background: var(--purple-dim);  color: var(--purple); }
+    .pill-green  { background: var(--green-dim);   color: var(--green); }
+    .pill-red    { background: var(--red-dim);     color: var(--red); }
+    .pill-yellow { background: var(--yellow-dim);  color: var(--yellow); }
+    .pill-blue   { background: var(--blue-dim);    color: #818cf8; }
+
+    /* ── Gaps table ─────────────────────────────────────────────── */
+    .gap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .gap-table th {
+      text-align: left; padding: 9px 14px;
+      background: var(--surface2); border: 1px solid var(--border);
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--text-muted);
+    }
+    .gap-table td { padding: 10px 14px; border: 1px solid var(--border); vertical-align: top; }
+    .gap-table tr:nth-child(even) td { background: #ffffff03; }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    .footer {
+      margin-top: 48px; padding-top: 18px;
+      border-top: 1px solid var(--border);
+      text-align: center; font-size: 12px; color: var(--text-muted);
+    }
+    .footer span { color: var(--cyan); }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-badge">Library 覆盖率 &amp; 适配方案</div>
+    <h1>ai-workflows-hub vs novo-quote-ai</h1>
+    <p class="header-sub">
+      对比基准：<span>novo-quote-ai/.github</span> &nbsp;·&nbsp;
+      目标：hub 作为通用 library 替代 novo-quote-ai 内嵌流程，并支持其他项目接入 &nbsp;·&nbsp;
+      <span>2026-06-24</span>
+    </p>
+  </div>
+
+  <!-- Score banner -->
+  <div class="score-banner">
+    <div class="score-card">
+      <div class="score-ring">
+        <svg width="88" height="88" viewBox="0 0 88 88">
+          <circle class="ring-bg" cx="44" cy="44" r="37"/>
+          <circle class="ring-fill" cx="44" cy="44" r="37"
+            stroke="#22c55e" stroke-dasharray="232.5" stroke-dashoffset="16.3"/>
+        </svg>
+        <div class="ring-text">
+          <span class="ring-pct" style="color:#22c55e">93%</span>
+          <span class="ring-label">覆盖率</span>
+        </div>
+      </div>
+      <div class="score-info">
+        <h2>核心 PGE 三件套</h2>
+        <p>Planner + Generator + Evaluator<br/>
+        不含 E2E 测试套件<br/>
+        <strong style="color:#22c55e">可投入生产使用</strong></p>
+      </div>
+    </div>
+    <div class="score-card">
+      <div class="score-ring">
+        <svg width="88" height="88" viewBox="0 0 88 88">
+          <circle class="ring-bg" cx="44" cy="44" r="37"/>
+          <circle class="ring-fill" cx="44" cy="44" r="37"
+            stroke="#f59e0b" stroke-dasharray="232.5" stroke-dashoffset="48.8"/>
+        </svg>
+        <div class="ring-text">
+          <span class="ring-pct" style="color:#f59e0b">79%</span>
+          <span class="ring-label">覆盖率</span>
+        </div>
+      </div>
+      <div class="score-info">
+        <h2>整体（含 E2E）</h2>
+        <p>E2E 测试套件 3 个 workflow 暂未实现<br/>
+        做完 E2E 泛化后整体可达 <strong style="color:#22c55e">90%+</strong></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module breakdown -->
+  <div class="section-title">模块覆盖率分析</div>
+  <div class="modules">
+
+    <!-- 核心机制 -->
+    <div class="module-card open">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">⚙️</span>
+        <span class="module-name">核心机制 / Label 流转</span>
+        <span class="module-weight">权重 20%</span>
+        <span class="module-pct-badge" style="color:#22c55e">92%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:92%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>evaluate / human-rework / milestone-advance 三模式路由</strong><div class="note">逻辑与 novo-quote-ai 完全一致</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>GitHub App token 保证 bot attribution</strong><div class="note">所有 bot 操作经过 App 身份，触发正确的下游 workflow</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>pge/pr:approved / needs-rework / rejected 三态标签体系</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Milestone 流水线（approve 后 pre-trigger 下一 milestone）</strong><div class="note">不等 PR merge，直接 remove + re-add pge/status:implement</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Rework 迭代上限保护（max 5 次）+ Human push 观察模式</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Rework checkout persist-credentials: false</strong><div class="note">确保 rework commits 以 App bot 身份提交</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Planner -->
+    <div class="module-card open">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">🗺️</span>
+        <span class="module-name">Planner (pge-plan.yml)</span>
+        <span class="module-weight">权重 15%</span>
+        <span class="module-pct-badge" style="color:#22c55e">95%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:95%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>三轮迭代 loop（Iter 1 → Advisor → Iter 2 → Advisor → Iter 3）</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Advisor EXCLUDE / INCLUDE / CLARIFY 三档 verdict 框架</strong><div class="note">含 tiebreaker 规则 + 结构化 summary table，防止模糊建议导致 Generator 误判 scope</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Iteration 3 两场景（直接出计划 vs 有新问题时 provisional 计划）</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Explicitly excluded 强制输出（Iter 1/2/3 全部含此章节）</strong><div class="note">Generator 读计划时直接找到完整 scope 边界，不需回溯 Q&A 评论</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Sprint Contract HTML 标记 + 重触发历史记忆</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Figma MCP 集成（自动检测 Figma URL 并传入 token）</strong></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generator -->
+    <div class="module-card open">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">⚡</span>
+        <span class="module-name">Generator (pge-implement.yml)</span>
+        <span class="module-weight">权重 20%</span>
+        <span class="module-pct-badge" style="color:#22c55e">93%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:93%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>implement + rework 双模式 + Milestone 分支 + Pipeline 模式</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>基线 SKILL 强制读取（NON-NEGOTIABLE）</strong><div class="note">clean-code / refactor / sub-project development-standard 三类，有明确 binding 优先级规则</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>通用 coding standards 内联（函数形状 / 命名 / 错误处理 / async）</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Per-layer SKILL update 矩阵（7 个 layer → 对应 SKILL 文件）</strong><div class="note">implement 和 rework 两模式同步；无匹配 SKILL 时在 PR body 标注 ⚠️ SKILL gap</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Rework scope creep 强制 revert（MUST be reverted，不允许"留着以后"）</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Pre-push self-verification checklist（每项明确 ✅ RESOLVED / ❌ STILL OPEN）</strong></div></div>
+          <div class="item-row skip"><span class="item-icon">➖</span><div class="item-text"><strong>各语言具体 lint 命令</strong><div class="note">有意省略。通过 CLAUDE.md 或 project_context 注入，hub 不硬编码语言特定命令</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Evaluator -->
+    <div class="module-card open">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">🔍</span>
+        <span class="module-name">Evaluator (pge-evaluate.yml)</span>
+        <span class="module-weight">权重 25%</span>
+        <span class="module-pct-badge" style="color:#22c55e">90%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:90%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension A — pge-verify.sh CI gate（pass / fail / skipped 三态）</strong><div class="note">bot push 失败直接阻断 + 打 needs-rework；human push 失败仅评论提醒</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension B — 需求覆盖率逐条 AC 检查</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension D + D.1/D.2/D.3 — SKILL 一致性（cross-cutting / Q&A capture / PR body 检查）</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension G.1~G.5 — 类型安全 / 函数形状 / 命名 / 错误处理 / 重构协议</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension F — Figma 设计还原（条件触发）</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Verdict 聚合 + 标签自动打标 + Formal GitHub Review 提交</strong></div></div>
+          <div class="item-row skip"><span class="item-icon">➖</span><div class="item-text"><strong>G.6 项目特定 layer 检查</strong><div class="note">有意省略。TypeScript hooks / 模块规范等通过 project_context 注入，见下方适配方案</div></div></div>
+          <div class="item-row skip"><span class="item-icon">➖</span><div class="item-text"><strong>E2E sedimentation 检查</strong><div class="note">依赖 E2E 套件，下一阶段实现</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- E2E -->
+    <div class="module-card">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">🧪</span>
+        <span class="module-name">E2E 测试套件（3 个 workflow）</span>
+        <span class="module-weight">权重 15%</span>
+        <span class="module-pct-badge" style="color:#ef4444">0%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:0%;background:#ef4444"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row gap"><span class="item-icon">❌</span><div class="item-text"><strong>claude-e2e-ci.yml — affected spec 计算 + CI E2E 运行</strong></div></div>
+          <div class="item-row gap"><span class="item-icon">❌</span><div class="item-text"><strong>claude-e2e-explore.yml — 按需 Playwright 探索</strong></div></div>
+          <div class="item-row gap"><span class="item-icon">❌</span><div class="item-text"><strong>claude-e2e-generator.yml — 生成 spec + 沉淀为永久测试</strong></div></div>
+        </div>
+        <p style="margin-top:10px;font-size:12px;color:var(--text-muted);">
+          💡 下一阶段：泛化为消费者只需提供 <code>test_command</code> 和 <code>spec_dir</code> 参数的通用版本，完成后整体覆盖率 79% → 90%+。
+        </p>
+      </div>
+    </div>
+
+    <!-- 基础设施 -->
+    <div class="module-card">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">🏗️</span>
+        <span class="module-name">基础设施 / Actions / Templates</span>
+        <span class="module-weight">权重 5%</span>
+        <span class="module-pct-badge" style="color:#22c55e">95%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:95%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>claude-bedrock/action.yml — aws_role / aws_region 参数化</strong><div class="note">比 novo-quote-ai 更通用，hardcoded ARN 已抽象为 input</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>pge-code-review.yml / pge-decompose.yml（hub 独有）</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>templates/pge.yml — 消费者一键接入模板</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>templates/scripts/pge-verify.sh.example — CI 验证脚本模板</strong></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Adaptation mechanisms -->
+  <div class="section-title">项目特定功能的适配方案</div>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px;">
+    novo-quote-ai 中的部分逻辑是 TypeScript / React 项目特有的，不适合写进通用 hub。
+    下面两个机制让每个消费者 repo 可以无侵入地注入自己的项目特定逻辑，同时 hub 保持对任意技术栈的适配能力。
+  </p>
+
+  <div class="adapt-grid">
+
+    <!-- project_context -->
+    <div class="adapt-card">
+      <div class="adapt-card-header">
+        <div class="adapt-icon cyan">💬</div>
+        <div>
+          <div class="adapt-card-title">project_context 输入参数</div>
+          <div class="adapt-card-sub">注入项目特定的 AI 上下文，影响 Planner / Generator / Evaluator 的决策</div>
+        </div>
+      </div>
+      <div class="adapt-card-body">
+        <p>每个 workflow 都暴露了一个可选的 <code>project_context</code> 字符串参数，会被插入到 Claude prompt 的最开头。消费者可以在这里描述：</p>
+        <ul>
+          <li>技术栈和架构约束（TypeScript + React、Kotlin Android、Python FastAPI 等）</li>
+          <li>项目特定的评估维度（相当于 novo-quote-ai 的 G.6）</li>
+          <li>模块边界规则和命名约定</li>
+          <li>特殊的安全、性能或合规要求</li>
+        </ul>
+        <p style="margin-top:6px;margin-bottom:6px;font-size:12px;color:var(--text-muted);">novo-quote-ai 接入示例：</p>
+<pre><span class="cm"># pge-evaluate.yml (消费者 repo)</span>
+<span class="kw">jobs</span>:
+  evaluate:
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
+    with:
+      project_context: |
+        <span class="st">Tech stack: TypeScript, React 18, NestJS, PostgreSQL.</span>
+        <span class="st">G.6 layer checks (apply in addition to G.1–G.5):</span>
+        <span class="st">- React hooks must follow rules-of-hooks; no hooks in callbacks.</span>
+        <span class="st">- NestJS services must be injected via constructor, not new().</span>
+        <span class="st">- All DB queries must go through the Repository layer, not direct EntityManager.</span></pre>
+      </div>
+    </div>
+
+    <!-- pge-verify.sh -->
+    <div class="adapt-card">
+      <div class="adapt-card-header">
+        <div class="adapt-icon purple">🔧</div>
+        <div>
+          <div class="adapt-card-title">pge-verify.sh 验证脚本</div>
+          <div class="adapt-card-sub">Consumer repo 提供真实 build/lint/test 验证，替代硬编码 CI 命令</div>
+        </div>
+      </div>
+      <div class="adapt-card-body">
+        <p>在消费者 repo 创建 <code>.github/scripts/pge-verify.sh</code>，Evaluator 会在 Claude review 之前自动执行它：</p>
+        <ul>
+          <li>脚本退出 <code>0</code> → Dimension A ✅，Claude 正常 review</li>
+          <li>脚本退出非 <code>0</code> → CI gate 阻断，自动打 <code>pge/pr:needs-rework</code></li>
+          <li>脚本不存在 → 降级为 Claude 读 PR 描述判断（向后兼容）</li>
+        </ul>
+        <p style="margin-top:6px;margin-bottom:6px;font-size:12px;color:var(--text-muted);">novo-quote-ai 接入示例：</p>
+<pre><span class="cm">#!/bin/bash</span>
+<span class="kw">set</span> -euo pipefail
+
+<span class="cm"># CHANGED_PATHS 由 hub 自动注入</span>
+<span class="kw">while</span> IFS= <span class="fn">read</span> -r path; <span class="kw">do</span>
+  <span class="kw">case</span> <span class="st">"$path"</span> <span class="kw">in</span>
+    frontend/*) PROJECTS+=(<span class="st">frontend</span>) ;;
+    backend/*)  PROJECTS+=(<span class="st">backend</span>)  ;;
+  <span class="kw">esac</span>
+<span class="kw">done</span> &lt;&lt;&lt; <span class="st">"$CHANGED_PATHS"</span>
+
+<span class="kw">for</span> p <span class="kw">in</span> <span class="st">"${PROJECTS[@]}"</span>; <span class="kw">do</span>
+  <span class="fn">pushd</span> <span class="st">"$p"</span>
+  npm run typecheck &amp;&amp; npm run lint &amp;&amp; npm run test:unit
+  <span class="fn">popd</span>
+<span class="kw">done</span></pre>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Mapping table -->
+  <div class="section-title">novo-quote-ai 特有项 → hub 通用方案 对照表</div>
+  <table class="map-table">
+    <thead>
+      <tr>
+        <th>novo-quote-ai 特有逻辑</th>
+        <th>类型</th>
+        <th>hub 的通用方案</th>
+        <th>状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="col-old">TypeScript/React 专属 Evaluator 检查（G.6）<br/><span style="font-size:11px;color:var(--text-muted)">hooks rules, NestJS DI, Repository pattern</span></td>
+        <td>项目特定</td>
+        <td class="col-new"><code>project_context</code> 输入参数注入到 Evaluator prompt</td>
+        <td><span class="pill pill-green">已支持</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">硬编码 build/lint/test 命令<br/><span style="font-size:11px;color:var(--text-muted)">npm run typecheck &amp;&amp; npm run lint</span></td>
+        <td>项目特定</td>
+        <td class="col-new"><code>pge-verify.sh</code> 脚本 + CI gate 机制</td>
+        <td><span class="pill pill-green">已支持</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">硬编码 AWS ARN + Region</td>
+        <td>部署特定</td>
+        <td class="col-new"><code>aws_role</code> / <code>aws_region</code> 参数化，每个 workflow call 独立配置</td>
+        <td><span class="pill pill-green">已支持</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">Figma 设计还原检查（Dimension F）</td>
+        <td>可选功能</td>
+        <td class="col-new"><code>figma_token</code> secret 传入即启用，自动检测 issue/PR 中的 Figma URL</td>
+        <td><span class="pill pill-green">原生支持</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">Planner 项目特定架构上下文</td>
+        <td>项目特定</td>
+        <td class="col-new"><code>project_context</code> 注入到 Planner prompt，或在 <code>CLAUDE.md</code> 中描述</td>
+        <td><span class="pill pill-green">已支持</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">Generator 项目特定技术约束<br/><span style="font-size:11px;color:var(--text-muted)">如 "use Hilt for DI", "target SDK 35"</span></td>
+        <td>项目特定</td>
+        <td class="col-new"><code>project_context</code> 注入到 Generator prompt</td>
+        <td><span class="pill pill-green">已支持</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">SKILL 文件路径约定<br/><span style="font-size:11px;color:var(--text-muted)">.cursor/skills/&lt;layer&gt;/SKILL.md</span></td>
+        <td>约定特定</td>
+        <td class="col-new">per-layer SKILL 矩阵自动查找；路径不存在时跳过或记录 ⚠️ gap，不报错</td>
+        <td><span class="pill pill-green">已支持</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">E2E 测试（claude-e2e-ci / explore / generator）</td>
+        <td>高级功能</td>
+        <td class="col-new">下一阶段：泛化为参数化 workflow，消费者提供 test_command + spec_dir</td>
+        <td><span class="pill pill-yellow">规划中</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Remaining real gaps -->
+  <div class="section-title">剩余真实差距</div>
+  <table class="gap-table">
+    <thead>
+      <tr>
+        <th>差距</th>
+        <th>模块</th>
+        <th>优先级</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>E2E 测试套件（3 个 workflow）</strong></td>
+        <td>E2E</td>
+        <td><span class="pill pill-red">高</span></td>
+        <td>完成后整体覆盖率从 79% 提升至 90%+。可泛化为消费者仅需提供 <code>test_command</code> 和 <code>spec_dir</code> 的通用版本</td>
+      </tr>
+      <tr>
+        <td><strong>各语言具体 lint 命令示例</strong></td>
+        <td>Generator</td>
+        <td><span class="pill pill-blue">有意省略</span></td>
+        <td>属于 project-specific。TypeScript 用 <code>npm run typecheck</code>，Python 用 <code>ruff check</code>，由消费者在 CLAUDE.md 或 project_context 中指定</td>
+      </tr>
+      <tr>
+        <td><strong>G.6 项目特定 layer 检查</strong></td>
+        <td>Evaluator</td>
+        <td><span class="pill pill-blue">有意省略</span></td>
+        <td>TypeScript hooks 规范、NestJS DI 约定等通过 project_context 注入，hub 不硬编码语言特定规则</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Footer -->
+  <div class="footer">
+    ai-workflows-hub &nbsp;·&nbsp;
+    对比基准 <span>novo-quote-ai/.github</span> &nbsp;·&nbsp;
+    <span>2026-06-24</span>
+  </div>
+
+</div>
+
+<script>
+  function toggle(header) {
+    header.closest('.module-card').classList.toggle('open');
+  }
+</script>
+</body>
+</html>

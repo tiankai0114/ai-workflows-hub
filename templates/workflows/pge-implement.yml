@@ -1,0 +1,39 @@
+name: "PGE: Generator"
+
+# ─── PGE trigger: Generator (implement / rework) ──────────────────────────────
+# Fires on:
+#   - issue labeled `pge/status:implement`   → implement mode (write code, open PR)
+#   - PR labeled `pge/pr:needs-rework`        → rework mode (fix Evaluator feedback)
+# Delegates to the ai-workflows-hub reusable workflow.
+#
+# CONFIGURE: replace YOUR_BOT_ID / your-app[bot]. (aws_role is pre-filled with the
+# shared Telenav Bedrock role — contact Build/Release team or ktian@telenavsoftware.com
+# if the role's permissions are not yet configured for your repo.)
+# `evaluator_workflow_name` MUST match the `name:` of pge-evaluate.yml ("PGE: Evaluator").
+# Project context lives in CLAUDE.md and is read automatically.
+# Required secrets: GH_APP_ID, GH_APP_PRIVATE_KEY (FIGMA_TOKEN optional).
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [labeled]
+
+jobs:
+  run:
+    if: |
+      (github.event_name == 'issues' && github.event.label.name == 'pge/status:implement') ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-implement.yml@v1
+    with:
+      aws_role: "arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge"
+      bot_id: "YOUR_BOT_ID"
+      bot_name: "your-app[bot]"
+      mode: ${{ (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework') && 'rework' || 'implement' }}
+      pr_number: ${{ github.event.pull_request.number || '' }}
+      evaluator_workflow_name: "PGE: Evaluator"
+    secrets:
+      github_app_id: ${{ secrets.GH_APP_ID }}
+      github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+      figma_token: ${{ secrets.FIGMA_TOKEN }}

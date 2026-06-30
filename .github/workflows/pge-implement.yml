@@ -14,7 +14,7 @@ name: "PGE: Generator"
 #       if: |
 #         (github.event_name == 'issues' && github.event.label.name == 'pge/status:implement') ||
 #         (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
-#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-implement.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-implement.yml@v1
 #       with:
 #         bot_name: "your-app[bot]"
 #         bot_id: "YOUR_BOT_ID"
@@ -96,7 +96,7 @@ permissions:
 
 jobs:
   # ─── Generator: Implement when mode=implement ───────────────────────────────
-  claude-implement:
+  pge-implement:
     if: inputs.mode == 'implement'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -365,7 +365,7 @@ jobs:
             });
 
   # ─── Rework: Auto-fix Evaluator feedback (mode=rework) ──────────────────────
-  claude-rework:
+  pge-rework:
     if: inputs.mode == 'rework'
     runs-on: ubuntu-latest
     timeout-minutes: 45

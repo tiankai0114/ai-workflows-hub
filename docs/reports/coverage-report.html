@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ai-workflows-hub · Coverage Report &amp; Adaptation Guide</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222535;
+      --border: #2e3148;
+      --text: #e2e4f0;
+      --text-muted: #7b80a0;
+      --green: #22c55e;
+      --green-dim: #16a34a33;
+      --yellow: #f59e0b;
+      --yellow-dim: #d9770633;
+      --red: #ef4444;
+      --red-dim: #dc262633;
+      --blue: #6366f1;
+      --blue-dim: #4f46e533;
+      --purple: #a855f7;
+      --purple-dim: #9333ea33;
+      --cyan: #06b6d4;
+      --cyan-dim: #0891b233;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 32px 24px;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      background: #ffffff0f;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--cyan);
+    }
+    pre {
+      background: #11131d;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #c9d1e0;
+      margin-top: 10px;
+    }
+    pre .cm { color: #5a6a8a; }
+    pre .kw { color: #818cf8; }
+    pre .st { color: #86efac; }
+    pre .vr { color: var(--cyan); }
+    pre .fn { color: #fbbf24; }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .header { text-align: center; margin-bottom: 36px; }
+    .header-badge {
+      display: inline-block;
+      background: var(--blue-dim);
+      color: #818cf8;
+      border: 1px solid #4f46e566;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    h1 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+    .header-sub { color: var(--text-muted); font-size: 13px; }
+    .header-sub span { color: var(--cyan); }
+
+    /* ── Section title ───────────────────────────────────────── */
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--text-muted);
+      margin: 36px 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ── Score banner ─────────────────────────────────────────── */
+    .score-banner { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px; }
+    .score-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .score-ring { flex-shrink: 0; position: relative; width: 88px; height: 88px; }
+    .score-ring svg { transform: rotate(-90deg); }
+    .score-ring .ring-bg { fill: none; stroke: var(--border); stroke-width: 7; }
+    .score-ring .ring-fill { fill: none; stroke-width: 7; stroke-linecap: round; }
+    .score-ring .ring-text {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .ring-pct { font-size: 21px; font-weight: 700; line-height: 1; }
+    .ring-label { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+    .score-info h2 { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
+    .score-info p { font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+
+    /* ── Module cards ─────────────────────────────────────────── */
+    .modules { display: flex; flex-direction: column; gap: 10px; }
+    .module-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .module-header {
+      display: grid;
+      grid-template-columns: 22px 1fr auto auto auto;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .module-header:hover { background: var(--surface2); }
+    .module-icon { font-size: 15px; text-align: center; }
+    .module-name { font-weight: 600; font-size: 14px; }
+    .module-weight {
+      font-size: 11px; color: var(--text-muted);
+      background: #ffffff0a; border: 1px solid var(--border);
+      border-radius: 6px; padding: 2px 7px;
+    }
+    .module-pct-badge { font-size: 13px; font-weight: 700; min-width: 44px; text-align: right; }
+    .chevron { color: var(--text-muted); font-size: 10px; transition: transform .2s; }
+    .module-card.open .chevron { transform: rotate(180deg); }
+    .module-bar-wrap { padding: 0 16px 12px; }
+    .module-bar-track { height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .module-bar-fill { height: 100%; border-radius: 99px; }
+    .module-body { border-top: 1px solid var(--border); padding: 14px 16px; display: none; }
+    .module-card.open .module-body { display: block; }
+
+    .item-list { display: flex; flex-direction: column; gap: 7px; }
+    .item-row {
+      display: flex; gap: 9px; align-items: flex-start;
+      padding: 7px 10px; border-radius: 6px; font-size: 13px;
+    }
+    .item-row.done { background: var(--green-dim); }
+    .item-row.warn { background: var(--yellow-dim); }
+    .item-row.skip { background: var(--blue-dim); }
+    .item-row.gap  { background: var(--red-dim); }
+    .item-icon { flex-shrink: 0; width: 17px; text-align: center; margin-top: 1px; }
+    .item-text { flex: 1; }
+    .item-text strong { color: #fff; }
+    .item-text .note { color: var(--text-muted); font-size: 12px; }
+
+    /* ── Adaptation section ───────────────────────────────────── */
+    .adapt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .adapt-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .adapt-card-header {
+      padding: 14px 18px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .adapt-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .adapt-icon.cyan   { background: var(--cyan-dim); }
+    .adapt-icon.purple { background: var(--purple-dim); }
+    .adapt-card-title { font-weight: 700; font-size: 15px; color: #fff; }
+    .adapt-card-sub   { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .adapt-card-body  { padding: 14px 18px; }
+    .adapt-card-body p { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+    .adapt-card-body ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    .adapt-card-body ul li {
+      font-size: 12px;
+      padding-left: 14px;
+      position: relative;
+      color: var(--text-muted);
+    }
+    .adapt-card-body ul li::before { content: '·'; position: absolute; left: 4px; color: var(--cyan); }
+
+    /* ── Mapping table ─────────────────────────────────────────── */
+    .map-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .map-table th {
+      text-align: left;
+      padding: 9px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--text-muted);
+    }
+    .map-table td {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .map-table tr:nth-child(even) td { background: #ffffff03; }
+    .map-table .col-old { color: #f87171; }
+    .map-table .col-new { color: #86efac; }
+    .map-table .col-how { color: var(--text); }
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 99px;
+      font-size: 11px; font-weight: 600;
+    }
+    .pill-cyan   { background: var(--cyan-dim);   color: var(--cyan); }
+    .pill-purple { background: var(--purple-dim);  color: var(--purple); }
+    .pill-green  { background: var(--green-dim);   color: var(--green); }
+    .pill-red    { background: var(--red-dim);     color: var(--red); }
+    .pill-yellow { background: var(--yellow-dim);  color: var(--yellow); }
+    .pill-blue   { background: var(--blue-dim);    color: #818cf8; }
+
+    /* ── Gaps table ─────────────────────────────────────────────── */
+    .gap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .gap-table th {
+      text-align: left; padding: 9px 14px;
+      background: var(--surface2); border: 1px solid var(--border);
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--text-muted);
+    }
+    .gap-table td { padding: 10px 14px; border: 1px solid var(--border); vertical-align: top; }
+    .gap-table tr:nth-child(even) td { background: #ffffff03; }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    .footer {
+      margin-top: 48px; padding-top: 18px;
+      border-top: 1px solid var(--border);
+      text-align: center; font-size: 12px; color: var(--text-muted);
+    }
+    .footer span { color: var(--cyan); }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-badge">Library Coverage &amp; Adaptation Guide</div>
+    <h1>ai-workflows-hub vs novo-quote-ai</h1>
+    <p class="header-sub">
+      Baseline: <span>novo-quote-ai/.github</span> &nbsp;·&nbsp;
+      Goal: hub as a generic library replacing novo-quote-ai's embedded workflows, with support for any project &nbsp;·&nbsp;
+      <span>2026-06-24</span>
+    </p>
+  </div>
+
+  <!-- Score banner -->
+  <div class="score-banner">
+    <div class="score-card">
+      <div class="score-ring">
+        <svg width="88" height="88" viewBox="0 0 88 88">
+          <circle class="ring-bg" cx="44" cy="44" r="37"/>
+          <circle class="ring-fill" cx="44" cy="44" r="37"
+            stroke="#22c55e" stroke-dasharray="232.5" stroke-dashoffset="16.3"/>
+        </svg>
+        <div class="ring-text">
+          <span class="ring-pct" style="color:#22c55e">93%</span>
+          <span class="ring-label">Coverage</span>
+        </div>
+      </div>
+      <div class="score-info">
+        <h2>Core PGE Trio</h2>
+        <p>Planner + Generator + Evaluator<br/>
+        Excluding E2E test suite<br/>
+        <strong style="color:#22c55e">Production-ready</strong></p>
+      </div>
+    </div>
+    <div class="score-card">
+      <div class="score-ring">
+        <svg width="88" height="88" viewBox="0 0 88 88">
+          <circle class="ring-bg" cx="44" cy="44" r="37"/>
+          <circle class="ring-fill" cx="44" cy="44" r="37"
+            stroke="#f59e0b" stroke-dasharray="232.5" stroke-dashoffset="48.8"/>
+        </svg>
+        <div class="ring-text">
+          <span class="ring-pct" style="color:#f59e0b">79%</span>
+          <span class="ring-label">Coverage</span>
+        </div>
+      </div>
+      <div class="score-info">
+        <h2>Overall (incl. E2E)</h2>
+        <p>3 E2E workflow files not yet implemented<br/>
+        Reaches <strong style="color:#22c55e">90%+</strong> after E2E generalization</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module breakdown -->
+  <div class="section-title">Module Coverage Analysis</div>
+  <div class="modules">
+
+    <!-- Core Mechanism -->
+    <div class="module-card open">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">⚙️</span>
+        <span class="module-name">Core Mechanism / Label Routing</span>
+        <span class="module-weight">Weight 20%</span>
+        <span class="module-pct-badge" style="color:#22c55e">92%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:92%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Three-mode routing: evaluate / human-rework / milestone-advance</strong><div class="note">Logic is identical to novo-quote-ai</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>GitHub App token for proper bot attribution</strong><div class="note">All bot actions use App identity, correctly triggering downstream workflows</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Three-state label system: pge/pr:approved / needs-rework / rejected</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Milestone pipeline (pre-trigger next milestone on approve)</strong><div class="note">Removes and re-adds pge/status:implement without waiting for PR merge</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Rework iteration cap (max 5) + human-push observation mode</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Rework checkout with persist-credentials: false</strong><div class="note">Ensures rework commits are attributed to the App bot</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Planner -->
+    <div class="module-card open">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">🗺️</span>
+        <span class="module-name">Planner (pge-plan.yml)</span>
+        <span class="module-weight">Weight 15%</span>
+        <span class="module-pct-badge" style="color:#22c55e">95%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:95%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Three-iteration loop (Iter 1 → Advisor → Iter 2 → Advisor → Iter 3)</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Advisor three-tier verdict framework: EXCLUDE / INCLUDE / CLARIFY</strong><div class="note">Includes tiebreaker rules + structured summary table, preventing ambiguous recommendations from causing Generator scope creep</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Iteration 3 dual-scenario handling (direct plan vs provisional plan with new questions)</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Mandatory "Explicitly excluded" section output (present in Iter 1/2/3)</strong><div class="note">Generator reads the complete scope boundary directly from the plan, without needing to trace back through Q&amp;A comments</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Sprint Contract HTML markers + re-trigger history memory</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Figma MCP integration (auto-detects Figma URLs and passes token)</strong></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generator -->
+    <div class="module-card open">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">⚡</span>
+        <span class="module-name">Generator (pge-implement.yml)</span>
+        <span class="module-weight">Weight 20%</span>
+        <span class="module-pct-badge" style="color:#22c55e">93%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:93%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dual-mode: implement + rework, milestone branches + pipeline mode</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Mandatory baseline SKILL reading (NON-NEGOTIABLE)</strong><div class="note">Three categories: clean-code / refactor / sub-project development-standard, with explicit binding priority rules</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Inlined universal coding standards (function shape / naming / error handling / async)</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Per-layer SKILL update matrix (7 layers → corresponding SKILL files)</strong><div class="note">Synchronized across both implement and rework modes; records ⚠️ SKILL gap in PR body when no matching SKILL file exists</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Rework scope creep enforced revert (MUST be reverted — no "leave for later")</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Pre-push self-verification checklist (each item explicitly marked ✅ RESOLVED / ❌ STILL OPEN)</strong></div></div>
+          <div class="item-row skip"><span class="item-icon">➖</span><div class="item-text"><strong>Language-specific lint commands</strong><div class="note">Intentionally omitted. Injected via CLAUDE.md or project_context — hub does not hardcode language-specific commands</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Evaluator -->
+    <div class="module-card open">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">🔍</span>
+        <span class="module-name">Evaluator (pge-evaluate.yml)</span>
+        <span class="module-weight">Weight 25%</span>
+        <span class="module-pct-badge" style="color:#22c55e">90%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:90%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension A — pge-verify.sh CI gate (three states: pass / fail / skipped)</strong><div class="note">Bot push failure: blocks immediately + labels needs-rework; human push failure: comment-only observation mode</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension B — Requirement coverage, per-AC line-by-line check</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension D + D.1/D.2/D.3 — SKILL consistency (cross-cutting / Q&amp;A capture / PR body checks)</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension G.1–G.5 — Type safety / function shape / naming / error handling / refactor protocol</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Dimension F — Figma design fidelity check (conditionally triggered)</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>Verdict aggregation + auto-labeling + formal GitHub Review submission</strong></div></div>
+          <div class="item-row skip"><span class="item-icon">➖</span><div class="item-text"><strong>G.6 Project-specific layer checks</strong><div class="note">Intentionally omitted. TypeScript hooks rules, NestJS DI conventions, etc. are injected via project_context — see Adaptation Guide below</div></div></div>
+          <div class="item-row skip"><span class="item-icon">➖</span><div class="item-text"><strong>E2E sedimentation check</strong><div class="note">Depends on E2E suite — planned for next phase</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- E2E -->
+    <div class="module-card">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">🧪</span>
+        <span class="module-name">E2E Test Suite (3 workflows)</span>
+        <span class="module-weight">Weight 15%</span>
+        <span class="module-pct-badge" style="color:#ef4444">0%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:0%;background:#ef4444"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row gap"><span class="item-icon">❌</span><div class="item-text"><strong>claude-e2e-ci.yml — affected spec calculation + CI E2E execution</strong></div></div>
+          <div class="item-row gap"><span class="item-icon">❌</span><div class="item-text"><strong>claude-e2e-explore.yml — on-demand Playwright exploration</strong></div></div>
+          <div class="item-row gap"><span class="item-icon">❌</span><div class="item-text"><strong>claude-e2e-generator.yml — spec generation + sedimentation as permanent tests</strong></div></div>
+        </div>
+        <p style="margin-top:10px;font-size:12px;color:var(--text-muted);">
+          💡 Next phase: generalize into a consumer-facing workflow requiring only <code>test_command</code> and <code>spec_dir</code> inputs — overall coverage rises from 79% to 90%+.
+        </p>
+      </div>
+    </div>
+
+    <!-- Infrastructure -->
+    <div class="module-card">
+      <div class="module-header" onclick="toggle(this)">
+        <span class="module-icon">🏗️</span>
+        <span class="module-name">Infrastructure / Actions / Templates</span>
+        <span class="module-weight">Weight 5%</span>
+        <span class="module-pct-badge" style="color:#22c55e">95%</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="module-bar-wrap">
+        <div class="module-bar-track"><div class="module-bar-fill" style="width:95%;background:#22c55e"></div></div>
+      </div>
+      <div class="module-body">
+        <div class="item-list">
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>claude-bedrock/action.yml — aws_role / aws_region parameterized</strong><div class="note">More generic than novo-quote-ai; hardcoded ARN abstracted into inputs</div></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>pge-code-review.yml / pge-decompose.yml (hub-exclusive additions)</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>templates/pge.yml — one-click consumer onboarding template</strong></div></div>
+          <div class="item-row done"><span class="item-icon">✅</span><div class="item-text"><strong>templates/scripts/pge-verify.sh.example — CI verification script template</strong></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Adaptation mechanisms -->
+  <div class="section-title">Adaptation Guide for Project-Specific Features</div>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px;">
+    Some logic in novo-quote-ai is specific to TypeScript / React projects and does not belong in a generic hub.
+    The two mechanisms below allow each consumer repo to inject project-specific logic non-invasively,
+    while the hub remains compatible with any technology stack.
+  </p>
+
+  <div class="adapt-grid">
+
+    <!-- project_context -->
+    <div class="adapt-card">
+      <div class="adapt-card-header">
+        <div class="adapt-icon cyan">💬</div>
+        <div>
+          <div class="adapt-card-title">project_context Input Parameter</div>
+          <div class="adapt-card-sub">Inject project-specific AI context, influencing Planner / Generator / Evaluator decisions</div>
+        </div>
+      </div>
+      <div class="adapt-card-body">
+        <p>Every workflow exposes an optional <code>project_context</code> string parameter that is prepended to Claude's prompt. Consumers use it to describe:</p>
+        <ul>
+          <li>Tech stack and architecture constraints (TypeScript + React, Kotlin Android, Python FastAPI, etc.)</li>
+          <li>Project-specific evaluation dimensions (equivalent to novo-quote-ai's G.6)</li>
+          <li>Module boundary rules and naming conventions</li>
+          <li>Special security, performance, or compliance requirements</li>
+        </ul>
+        <p style="margin-top:6px;margin-bottom:6px;font-size:12px;color:var(--text-muted);">Example — novo-quote-ai onboarding:</p>
+<pre><span class="cm"># pge-evaluate.yml (consumer repo)</span>
+<span class="kw">jobs</span>:
+  evaluate:
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
+    with:
+      project_context: |
+        <span class="st">Tech stack: TypeScript, React 18, NestJS, PostgreSQL.</span>
+        <span class="st">G.6 layer checks (apply in addition to G.1–G.5):</span>
+        <span class="st">- React hooks must follow rules-of-hooks; no hooks in callbacks.</span>
+        <span class="st">- NestJS services must be injected via constructor, not new().</span>
+        <span class="st">- All DB queries must go through the Repository layer, not direct EntityManager.</span></pre>
+      </div>
+    </div>
+
+    <!-- pge-verify.sh -->
+    <div class="adapt-card">
+      <div class="adapt-card-header">
+        <div class="adapt-icon purple">🔧</div>
+        <div>
+          <div class="adapt-card-title">pge-verify.sh Verification Script</div>
+          <div class="adapt-card-sub">Consumer repo provides real build/lint/test verification, replacing hardcoded CI commands</div>
+        </div>
+      </div>
+      <div class="adapt-card-body">
+        <p>Place <code>.github/scripts/pge-verify.sh</code> in the consumer repo — the Evaluator automatically executes it before Claude's review:</p>
+        <ul>
+          <li>Script exits <code>0</code> → Dimension A ✅, Claude proceeds with review</li>
+          <li>Script exits non-<code>0</code> → CI gate blocks, auto-labels <code>pge/pr:needs-rework</code></li>
+          <li>Script absent → falls back to Claude reading the PR description (backward-compatible)</li>
+        </ul>
+        <p style="margin-top:6px;margin-bottom:6px;font-size:12px;color:var(--text-muted);">Example — novo-quote-ai integration:</p>
+<pre><span class="cm">#!/bin/bash</span>
+<span class="kw">set</span> -euo pipefail
+
+<span class="cm"># CHANGED_PATHS is injected automatically by the hub</span>
+<span class="kw">while</span> IFS= <span class="fn">read</span> -r path; <span class="kw">do</span>
+  <span class="kw">case</span> <span class="st">"$path"</span> <span class="kw">in</span>
+    frontend/*) PROJECTS+=(<span class="st">frontend</span>) ;;
+    backend/*)  PROJECTS+=(<span class="st">backend</span>)  ;;
+  <span class="kw">esac</span>
+<span class="kw">done</span> &lt;&lt;&lt; <span class="st">"$CHANGED_PATHS"</span>
+
+<span class="kw">for</span> p <span class="kw">in</span> <span class="st">"${PROJECTS[@]}"</span>; <span class="kw">do</span>
+  <span class="fn">pushd</span> <span class="st">"$p"</span>
+  npm run typecheck &amp;&amp; npm run lint &amp;&amp; npm run test:unit
+  <span class="fn">popd</span>
+<span class="kw">done</span></pre>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Mapping table -->
+  <div class="section-title">novo-quote-ai Specifics → Hub Generic Solutions</div>
+  <table class="map-table">
+    <thead>
+      <tr>
+        <th>novo-quote-ai Specific Logic</th>
+        <th>Type</th>
+        <th>Hub Generic Solution</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="col-old">TypeScript/React Evaluator checks (G.6)<br/><span style="font-size:11px;color:var(--text-muted)">hooks rules, NestJS DI, Repository pattern</span></td>
+        <td>Project-specific</td>
+        <td class="col-new"><code>project_context</code> input injected into Evaluator prompt</td>
+        <td><span class="pill pill-green">Supported</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">Hardcoded build/lint/test commands<br/><span style="font-size:11px;color:var(--text-muted)">npm run typecheck &amp;&amp; npm run lint</span></td>
+        <td>Project-specific</td>
+        <td class="col-new"><code>pge-verify.sh</code> script + CI gate mechanism</td>
+        <td><span class="pill pill-green">Supported</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">Hardcoded AWS ARN + Region</td>
+        <td>Deployment-specific</td>
+        <td class="col-new"><code>aws_role</code> / <code>aws_region</code> parameterized, configured independently per workflow call</td>
+        <td><span class="pill pill-green">Supported</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">Figma design fidelity check (Dimension F)</td>
+        <td>Optional feature</td>
+        <td class="col-new">Enabled by passing <code>figma_token</code> secret; auto-detects Figma URLs in issues/PRs</td>
+        <td><span class="pill pill-green">Native support</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">Planner project-specific architecture context</td>
+        <td>Project-specific</td>
+        <td class="col-new"><code>project_context</code> injected into Planner prompt, or described in <code>CLAUDE.md</code></td>
+        <td><span class="pill pill-green">Supported</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">Generator project-specific technical constraints<br/><span style="font-size:11px;color:var(--text-muted)">e.g. "use Hilt for DI", "target SDK 35"</span></td>
+        <td>Project-specific</td>
+        <td class="col-new"><code>project_context</code> injected into Generator prompt</td>
+        <td><span class="pill pill-green">Supported</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">SKILL file path conventions<br/><span style="font-size:11px;color:var(--text-muted)">.cursor/skills/&lt;layer&gt;/SKILL.md</span></td>
+        <td>Convention-specific</td>
+        <td class="col-new">Per-layer SKILL matrix auto-discovers files; skips gracefully or records ⚠️ gap when path does not exist</td>
+        <td><span class="pill pill-green">Supported</span></td>
+      </tr>
+      <tr>
+        <td class="col-old">E2E tests (claude-e2e-ci / explore / generator)</td>
+        <td>Advanced feature</td>
+        <td class="col-new">Next phase: parameterized workflow where consumers provide test_command + spec_dir</td>
+        <td><span class="pill pill-yellow">Planned</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Remaining real gaps -->
+  <div class="section-title">Remaining Gaps</div>
+  <table class="gap-table">
+    <thead>
+      <tr>
+        <th>Gap</th>
+        <th>Module</th>
+        <th>Priority</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>E2E test suite (3 workflows)</strong></td>
+        <td>E2E</td>
+        <td><span class="pill pill-red">High</span></td>
+        <td>Completing this raises overall coverage from 79% to 90%+. Can be generalized into a consumer-facing workflow requiring only <code>test_command</code> and <code>spec_dir</code></td>
+      </tr>
+      <tr>
+        <td><strong>Language-specific lint command examples</strong></td>
+        <td>Generator</td>
+        <td><span class="pill pill-blue">Intentional omission</span></td>
+        <td>Project-specific by design. TypeScript uses <code>npm run typecheck</code>, Python uses <code>ruff check</code> — specified by consumers via CLAUDE.md or project_context</td>
+      </tr>
+      <tr>
+        <td><strong>G.6 Project-specific layer checks</strong></td>
+        <td>Evaluator</td>
+        <td><span class="pill pill-blue">Intentional omission</span></td>
+        <td>TypeScript hooks rules, NestJS DI conventions, etc. are injected via project_context — hub does not hardcode language-specific rules</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Footer -->
+  <div class="footer">
+    ai-workflows-hub &nbsp;·&nbsp;
+    Baseline <span>novo-quote-ai/.github</span> &nbsp;·&nbsp;
+    <span>2026-06-24</span>
+  </div>
+
+</div>
+
+<script>
+  function toggle(header) {
+    header.closest('.module-card').classList.toggle('open');
+  }
+</script>
+</body>
+</html>
