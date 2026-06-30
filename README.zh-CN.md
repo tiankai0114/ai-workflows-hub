@@ -56,11 +56,11 @@ flowchart TD
 | `.github/actions/claude-bedrock/` | Composite Action | AWS Bedrock Claude 调用核心（OIDC 认证） |
 | `.github/actions/jira-handler/` | Composite Action | 调用 Jira REST API 创建 Issue |
 | `.github/actions/teams-handler/` | Composite Action | 发送 Teams 通知 |
-| `.github/workflows/claude-plan.yml` | Reusable Workflow | PGE Planner — 分析 Issue，自动问答，生成里程碑计划 |
-| `.github/workflows/claude-implement.yml` | Reusable Workflow | PGE Generator + Rework — 实现代码，开 PR |
-| `.github/workflows/claude-evaluate.yml` | Reusable Workflow | PGE Evaluator + Milestone Advance — 评审 PR，推进里程碑 |
-| `.github/workflows/claude-code-review.yml` | Reusable Workflow | Code Review — 人工 PR 的轻量代码审查 |
-| `.github/workflows/claude-decompose.yml` | Reusable Workflow | Decomposer — 将大 Issue 拆分为带依赖关系的子 Issue |
+| `.github/workflows/pge-plan.yml` | Reusable Workflow | PGE Planner — 分析 Issue，自动问答，生成里程碑计划 |
+| `.github/workflows/pge-implement.yml` | Reusable Workflow | PGE Generator + Rework — 实现代码，开 PR |
+| `.github/workflows/pge-evaluate.yml` | Reusable Workflow | PGE Evaluator + Milestone Advance — 评审 PR，推进里程碑 |
+| `.github/workflows/pge-code-review.yml` | Reusable Workflow | Code Review — 人工 PR 的轻量代码审查 |
+| `.github/workflows/pge-decompose.yml` | Reusable Workflow | Decomposer — 将大 Issue 拆分为带依赖关系的子 Issue |
 | `.github/workflows/cloudwatch-debug.yml` | Reusable Workflow | CloudWatch 日志轮询 → Claude 分析 → Jira/Teams |
 
 ### 复制型（从 `templates/` 复制一次）
@@ -236,7 +236,7 @@ jobs:
       !endsWith(github.event.pull_request.user.login, '[bot]') &&
       !contains(github.event.pull_request.title, '[Milestone') &&
       !endsWith(github.event.sender.login, '[bot]')
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-code-review.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-code-review.yml@v1
     with:
       aws_role: "YOUR_ROLE_ARN"
 ```
@@ -251,7 +251,7 @@ on:
 jobs:
   decompose:
     if: github.event.label.name == 'pge/status:decompose'
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-decompose.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-decompose.yml@v1
     with:
       aws_role: "YOUR_ROLE_ARN"
 ```
@@ -266,7 +266,7 @@ on:
 jobs:
   plan:
     if: github.event.label.name == 'pge/status:ready'
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-plan.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-plan.yml@v1
     with:
       aws_role: "YOUR_ROLE_ARN"
       bot_id: "YOUR_BOT_ID"
@@ -289,7 +289,7 @@ jobs:
     if: |
       (github.event_name == 'issues' && github.event.label.name == 'pge/status:implement') ||
       (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-implement.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-implement.yml@v1
     with:
       aws_role: "YOUR_ROLE_ARN"
       bot_id: "YOUR_BOT_ID"
@@ -325,7 +325,7 @@ jobs:
       github.event_name == 'pull_request_review' &&
       github.event.review.state == 'changes_requested' &&
       endsWith(github.event.pull_request.user.login, '[bot]')
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
     with:
       aws_role: "YOUR_ROLE_ARN"
       bot_id: "YOUR_BOT_ID"
@@ -340,7 +340,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.action == 'opened' && endsWith(github.event.pull_request.user.login, '[bot]')) ||
       (github.event.action == 'synchronize' && !endsWith(github.event.sender.login, '[bot]') && endsWith(github.event.pull_request.user.login, '[bot]'))
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
     with:
       aws_role: "YOUR_ROLE_ARN"
       bot_id: "YOUR_BOT_ID"
@@ -356,7 +356,7 @@ jobs:
       github.event.action == 'closed' &&
       github.event.pull_request.merged == true &&
       contains(github.event.pull_request.title, '[Milestone')
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
     with:
       aws_role: "YOUR_ROLE_ARN"
       bot_id: "YOUR_BOT_ID"
