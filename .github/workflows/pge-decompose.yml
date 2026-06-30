@@ -6,7 +6,7 @@ name: "PGE: Decompose"
 #   jobs:
 #     decompose:
 #       if: github.event.label.name == 'pge/status:decompose'
-#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-decompose.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-decompose.yml@v1
 #       with:
 
 on:
@@ -52,7 +52,7 @@ permissions:
   issues: write
 
 jobs:
-  claude-decompose:
+  pge-decompose:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

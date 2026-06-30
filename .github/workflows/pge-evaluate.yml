@@ -16,15 +16,15 @@ name: "PGE: Evaluator"
 #   jobs:
 #     human-rework:
 #       if: github.event_name == 'pull_request_review' && ...
-#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
 #       with: { mode: "human-rework", pr_number: ... }
 #     evaluate:
 #       if: github.event_name == 'workflow_dispatch' || ...
-#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
 #       with: { mode: "evaluate", pr_number: ... }
 #     milestone-advance:
 #       if: github.event.action == 'closed' && github.event.pull_request.merged == true && ...
-#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
 #       with: { mode: "milestone-advance", pr_number: ... }
 
 on:
@@ -126,7 +126,7 @@ jobs:
             console.log(`Human review requested changes on PR #${prNumber} — added pge/pr:needs-rework`);
 
   # ─── Claude Evaluator ────────────────────────────────────────────────────────
-  claude-evaluate:
+  pge-evaluate:
     if: inputs.mode == 'evaluate'
     runs-on: ubuntu-latest
     timeout-minutes: 30

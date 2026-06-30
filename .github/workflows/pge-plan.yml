@@ -6,7 +6,7 @@ name: "PGE: Planner"
 #   jobs:
 #     plan:
 #       if: github.event.label.name == 'pge/status:ready'
-#       uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-plan.yml@v1
+#       uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-plan.yml@v1
 #       with:
 #         bot_name: "your-app[bot]"
 #         bot_id: "YOUR_BOT_ID"
@@ -61,7 +61,7 @@ permissions:
   issues: write
 
 jobs:
-  claude-plan:
+  pge-plan:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
