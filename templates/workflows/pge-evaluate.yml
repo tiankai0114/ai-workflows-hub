@@ -1,0 +1,90 @@
+name: "PGE: Evaluator"
+
+# ─── PGE trigger: Evaluator ───────────────────────────────────────────────────
+# Fires on:
+#   - PR opened/synchronized           → evaluate bot-authored / Milestone PRs
+#   - PR review submitted (CHANGES_REQUESTED by a human) → label PR for rework
+#   - PR closed + merged (Milestone)   → advance to the next milestone
+#   - workflow_dispatch                → manual re-evaluation of a PR
+# Delegates to the ai-workflows-hub reusable workflow.
+#
+# CONFIGURE: replace YOUR_BOT_ID / your-app[bot]. (aws_role is pre-filled with the
+# shared Telenav Bedrock role — contact Build/Release team or ktian@telenavsoftware.com
+# if the role's permissions are not yet configured for your repo.)
+# This file's `name:` ("PGE: Evaluator") MUST match `evaluator_workflow_name` in
+# pge-implement.yml so rework can re-trigger evaluation.
+# Required secrets: GH_APP_ID, GH_APP_PRIVATE_KEY (FIGMA_TOKEN optional).
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to manually re-evaluate'
+        required: true
+        type: string
+
+jobs:
+  # Human reviewer requested changes on a bot PR → label it for rework
+  human-rework:
+    if: |
+      github.event_name == 'pull_request_review' &&
+      github.event.review.state == 'changes_requested' &&
+      !endsWith(github.event.review.user.login, '[bot]')
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
+    with:
+      aws_role: "arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge"
+      bot_id: "YOUR_BOT_ID"
+      bot_name: "your-app[bot]"
+      mode: "human-rework"
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets:
+      github_app_id: ${{ secrets.GH_APP_ID }}
+      github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+  # Evaluate bot-authored / Milestone PRs, or a manual dispatch
+  evaluate:
+    if: |
+      (
+        github.event_name == 'workflow_dispatch'
+      ) || (
+        github.event_name == 'pull_request' &&
+        github.event.action != 'closed' &&
+        (
+          endsWith(github.event.pull_request.user.login, '[bot]') ||
+          contains(github.event.pull_request.title, '[Milestone')
+        )
+      )
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
+    with:
+      aws_role: "arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge"
+      bot_id: "YOUR_BOT_ID"
+      bot_name: "your-app[bot]"
+      mode: "evaluate"
+      pr_number: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || github.event.pull_request.number }}
+    secrets:
+      github_app_id: ${{ secrets.GH_APP_ID }}
+      github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+      figma_token: ${{ secrets.FIGMA_TOKEN }}
+
+  # Merged Milestone PR → trigger the next milestone
+  milestone-advance:
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.title, '[Milestone')
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
+    with:
+      aws_role: "arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge"
+      bot_id: "YOUR_BOT_ID"
+      bot_name: "your-app[bot]"
+      mode: "milestone-advance"
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets:
+      github_app_id: ${{ secrets.GH_APP_ID }}
+      github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}

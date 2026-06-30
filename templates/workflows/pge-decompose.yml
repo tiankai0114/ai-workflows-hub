@@ -1,0 +1,24 @@
+name: "PGE: Decompose"
+
+# ─── PGE trigger: Decompose ───────────────────────────────────────────────────
+# Fires when an issue is labeled `pge/status:decompose`, then splits a large
+# issue into sub-issues. Delegates to the ai-workflows-hub reusable workflow —
+# no AI logic lives here.
+#
+# aws_role is pre-filled with the shared Telenav Bedrock role — no change needed.
+# (Need the role's permissions configured for your repo? Contact the Build/Release
+#  team or ktian@telenavsoftware.com.)
+# Project context (tech stack, scope conventions) lives in CLAUDE.md and is read
+# automatically — no need to pass project_context here.
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  decompose:
+    if: github.event.label.name == 'pge/status:decompose'
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-decompose.yml@v1
+    with:
+      aws_role: "arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge"

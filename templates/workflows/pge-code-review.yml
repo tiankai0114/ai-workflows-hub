@@ -1,0 +1,29 @@
+name: "PGE: Code Review"
+
+# ─── PGE trigger: Code Review ─────────────────────────────────────────────────
+# Fires on every human-authored PR. Bot-authored PRs and Milestone PRs are
+# skipped (those go to the Evaluator instead). Delegates to the ai-workflows-hub
+# reusable workflow.
+#
+# aws_role is pre-filled with the shared Telenav Bedrock role — no change needed.
+# (Need the role's permissions configured for your repo? Contact the Build/Release
+#  team or ktian@telenavsoftware.com.)
+# Project context (tech stack, review focus) lives in CLAUDE.md, read automatically.
+# FIGMA_TOKEN secret is optional (only needed for Figma design context).
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  code-review:
+    if: |
+      !endsWith(github.event.pull_request.user.login, '[bot]') &&
+      !contains(github.event.pull_request.title, '[Milestone') &&
+      !endsWith(github.event.sender.login, '[bot]')
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-code-review.yml@v1
+    with:
+      aws_role: "arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge"
+    secrets:
+      figma_token: ${{ secrets.FIGMA_TOKEN }}

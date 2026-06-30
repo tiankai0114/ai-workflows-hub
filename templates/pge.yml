@@ -41,7 +41,7 @@ jobs:
   # ── Decompose: split large issue into sub-issues ────────────────────────────
   decompose:
     if: github.event_name == 'issues' && github.event.label.name == 'pge/status:decompose'
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-decompose.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-decompose.yml@v1
     with:
       aws_role: "arn:aws:iam::ACCOUNT_ID:role/YOUR_ROLE_NAME"   # ← same as AWS_ROLE above
       # ── CONFIGURE 2/3 — project_context ──────────────────────────────────
@@ -58,7 +58,7 @@ jobs:
   # ── Plan: analyze issue and produce milestone plan ──────────────────────────
   plan:
     if: github.event_name == 'issues' && github.event.label.name == 'pge/status:ready'
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-plan.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-plan.yml@v1
     with:
       aws_role: "arn:aws:iam::ACCOUNT_ID:role/YOUR_ROLE_NAME"
       bot_id:   "YOUR_GITHUB_APP_BOT_USER_ID"
@@ -77,7 +77,7 @@ jobs:
     if: |
       (github.event_name == 'issues'       && github.event.label.name == 'pge/status:implement') ||
       (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework')
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-implement.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-implement.yml@v1
     with:
       aws_role:  "arn:aws:iam::ACCOUNT_ID:role/YOUR_ROLE_NAME"
       bot_id:    "YOUR_GITHUB_APP_BOT_USER_ID"
@@ -104,7 +104,7 @@ jobs:
       !endsWith(github.event.pull_request.user.login, '[bot]') &&
       !contains(github.event.pull_request.title, '[Milestone') &&
       !endsWith(github.event.sender.login, '[bot]')
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-code-review.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-code-review.yml@v1
     with:
       aws_role: "arn:aws:iam::ACCOUNT_ID:role/YOUR_ROLE_NAME"
       project_context: |
@@ -122,7 +122,7 @@ jobs:
       github.event_name == 'pull_request_review' &&
       github.event.review.state == 'changes_requested' &&
       !endsWith(github.event.review.user.login, '[bot]')
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
     with:
       aws_role:  "arn:aws:iam::ACCOUNT_ID:role/YOUR_ROLE_NAME"
       bot_id:    "YOUR_GITHUB_APP_BOT_USER_ID"
@@ -146,7 +146,7 @@ jobs:
           contains(github.event.pull_request.title, '[Milestone')
         )
       )
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
     with:
       aws_role:  "arn:aws:iam::ACCOUNT_ID:role/YOUR_ROLE_NAME"
       bot_id:    "YOUR_GITHUB_APP_BOT_USER_ID"
@@ -175,7 +175,7 @@ jobs:
       github.event.action == 'closed' &&
       github.event.pull_request.merged == true &&
       contains(github.event.pull_request.title, '[Milestone')
-    uses: tiankai0114/ai-workflows-hub/.github/workflows/claude-evaluate.yml@v1
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-evaluate.yml@v1
     with:
       aws_role:  "arn:aws:iam::ACCOUNT_ID:role/YOUR_ROLE_NAME"
       bot_id:    "YOUR_GITHUB_APP_BOT_USER_ID"

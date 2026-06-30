@@ -1,0 +1,27 @@
+name: "PGE: Planner"
+
+# ─── PGE trigger: Planner ─────────────────────────────────────────────────────
+# Fires when an issue is labeled `pge/status:ready`, then analyzes the issue and
+# produces a milestone plan. Delegates to the ai-workflows-hub reusable workflow.
+#
+# CONFIGURE: replace YOUR_BOT_ID / your-app[bot]. (aws_role is pre-filled with the
+# shared Telenav Bedrock role — contact Build/Release team or ktian@telenavsoftware.com
+# if the role's permissions are not yet configured for your repo.)
+# Project context lives in CLAUDE.md and is read automatically.
+# FIGMA_TOKEN secret is optional (only needed for Figma design context).
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  plan:
+    if: github.event.label.name == 'pge/status:ready'
+    uses: tiankai0114/ai-workflows-hub/.github/workflows/pge-plan.yml@v1
+    with:
+      aws_role: "arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge"
+      bot_id: "YOUR_BOT_ID"
+      bot_name: "your-app[bot]"
+    secrets:
+      figma_token: ${{ secrets.FIGMA_TOKEN }}
