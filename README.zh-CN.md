@@ -6,6 +6,8 @@ AI 模型调用基于 **AWS Bedrock（Claude）**，通过 GitHub OIDC 免密钥
 
 [English](./README.md) · **中文文档**
 
+📖 **接入指南：** [简体中文](./docs/onboarding/onboarding.zh-CN.md) · [English](./docs/onboarding/onboarding.en.md)
+
 ---
 
 ## 工作原理
@@ -67,7 +69,7 @@ flowchart TD
 
 | 文件 | 说明 |
 |------|------|
-| `templates/labels.yml` | PGE 标签体系，`gh label import` 导入 |
+| `templates/labels.yml` | PGE 标签体系，用 `scripts/import-labels.sh` 导入 |
 | `templates/ISSUE_TEMPLATE/` | Issue 模板（prd / bug / change-request） |
 | `templates/CLAUDE.md.template` | CLAUDE.md 骨架 |
 | `templates/cursor-skills/clean-code/SKILL.md` | 跨项目代码质量基线 |
@@ -77,32 +79,44 @@ flowchart TD
 
 ## 接入新 Repo — 完整步骤
 
+> 💡 **最快路径：** 运行一键安装脚本 `scripts/install.sh`，再按图文步骤指南 [`docs/onboarding/onboarding.zh-CN.md`](./docs/onboarding/onboarding.zh-CN.md)（[English](./docs/onboarding/onboarding.en.md)）操作即可。下面的步骤记录的是手动流程及底层细节。
+
 ### 前提条件
 
 - 目标 repo 已托管在 GitHub
 - 有 AWS 账号，且已创建 Bedrock 可用的 IAM Role（见步骤 2）
-- 本地已安装并登录 [`gh` CLI](https://cli.github.com/)（步骤 1、5、7 中使用）
+- 本地已安装并登录 [`gh` CLI](https://cli.github.com/)（步骤 5 导入标签时使用）
+- 本地有 `ruby`（`scripts/import-labels.sh` 导入标签时使用，macOS 自带）
 - 本地已安装 `jq`（`claude-bedrock` action 内部依赖，缺失时会直接报错）
 
 ---
 
 ### 步骤 1：复制模板文件
 
+最快的方式是用一键安装脚本，它会把标签、Issue 模板、5 个 PGE workflow、验证脚本、全部 7 个 SKILL 和 `CLAUDE.md` 一次性复制到位：
+
 ```bash
 # 克隆 library
-gh repo clone tiankai0114/ai-workflows-hub /tmp/ai-workflows-hub
+git clone https://github.com/tiankai0114/ai-workflows-hub.git /tmp/ai-workflows-hub
 
-# 进入目标 repo 根目录
+# 进入目标 repo 根目录并运行安装脚本
 cd /path/to/your-repo
+bash /tmp/ai-workflows-hub/scripts/install.sh
+```
 
-# 复制模板
+<details>
+<summary>或手动复制文件</summary>
+
+```bash
+cd /path/to/your-repo
 cp /tmp/ai-workflows-hub/templates/labels.yml .github/labels.yml
 cp -r /tmp/ai-workflows-hub/templates/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE
 cp /tmp/ai-workflows-hub/templates/CLAUDE.md.template CLAUDE.md
 mkdir -p .cursor/skills
-cp -r /tmp/ai-workflows-hub/templates/cursor-skills/clean-code .cursor/skills/
-cp -r /tmp/ai-workflows-hub/templates/cursor-skills/refactor .cursor/skills/
+# 复制全部 7 个 SKILL
+cp -r /tmp/ai-workflows-hub/templates/cursor-skills/. .cursor/skills/
 ```
+</details>
 
 ### 步骤 2：配置 AWS IAM Role（Trust Policy）
 
@@ -198,16 +212,36 @@ curl https://api.github.com/users/your-app-name%5Bbot%5D | grep '"id"'
 
 ### 步骤 5：导入 PGE 标签
 
+`gh label import` 并不是 gh 的原生命令，因此改用辅助脚本：它会逐条读取 `labels.yml`，用 `gh label create --force` 创建/更新每个标签（可安全重复运行）。需要 `gh`（已登录）和 `ruby`。
+
 ```bash
 cd /path/to/your-repo
-gh label import .github/labels.yml --repo YOUR_ORG/YOUR_REPO
-```
 
-> 需要 `gh auth login` 且 token 有 `write:repo` 权限。
+# gh auth login：提示输入 token 时，选择 Generate new token (classic)，
+# 权限勾选 read:org、repo
+gh auth login
+
+# 自动识别 git remote 的 owner/repo
+bash /tmp/ai-workflows-hub/scripts/import-labels.sh
+```
 
 ---
 
-### 步骤 6：提交 Issue Templates 到默认分支
+### 步骤 6：开启 Actions 写权限
+
+Generator / Evaluator 需要以 Actions 身份创建分支、开 PR，必须在 repo 设置里放开权限，否则 workflow 会因权限不足而失败。
+
+打开目标 repo → **Settings → Actions → General → Workflow permissions**：
+
+1. 选中 **Read and write permissions**
+2. 勾选 **Allow GitHub Actions to create and approve pull requests**
+3. 点击 **Save** 保存
+
+> **注意：**「允许 Actions 创建 PR」是仓库级开关，即使 workflow 里已声明 `permissions:` 也无法覆盖，因此必须在此手动开启。
+
+---
+
+### 步骤 7：提交 Issue Templates 到默认分支
 
 Issue Templates 必须在默认分支上才在 GitHub 的 "New Issue" 页面生效：
 
@@ -219,14 +253,16 @@ git push origin main   # 或 master，视你的默认分支
 
 ---
 
-### 步骤 7：添加触发 Workflow 文件
+### 步骤 8：添加触发 Workflow 文件
+
+> 若已运行 `install.sh`（步骤 1），这 5 个 workflow 文件已复制到 `.github/workflows/`，只需替换下方占位符即可。此处完整 YAML 供参考 / 手动配置。
 
 在目标 repo 的 `.github/workflows/` 下创建以下文件，替换 `YOUR_ROLE_ARN`、`YOUR_BOT_NAME`、`YOUR_BOT_ID`：
 
 **`pge-code-review.yml`** — 人工 PR 自动代码审查
 
 ```yaml
-name: "Claude: Code Review"
+name: "PGE: Code Review"
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
@@ -244,7 +280,7 @@ jobs:
 **`pge-decompose.yml`** — 将大 Issue 拆分为子 Issue
 
 ```yaml
-name: "Claude: Decompose"
+name: "PGE: Decompose"
 on:
   issues:
     types: [labeled]
@@ -259,7 +295,7 @@ jobs:
 **`pge-plan.yml`** — 分析 Issue，生成实现计划
 
 ```yaml
-name: "Claude: Planner"
+name: "PGE: Planner"
 on:
   issues:
     types: [labeled]
@@ -278,7 +314,7 @@ jobs:
 **`pge-implement.yml`** — 实现代码 + Rework
 
 ```yaml
-name: "Claude: Generator"
+name: "PGE: Generator"
 on:
   issues:
     types: [labeled]
@@ -296,9 +332,9 @@ jobs:
       bot_name: "YOUR_BOT_NAME[bot]"
       mode: ${{ (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework') && 'rework' || 'implement' }}
       pr_number: ${{ github.event.pull_request.number || '' }}
-      # evaluator_workflow_name 默认值为 "Claude: Evaluator"，
+      # evaluator_workflow_name 默认值为 "PGE: Evaluator"，
       # 若 pge-evaluate.yml 的 name: 字段自定义了名称，需在此同步修改
-      # evaluator_workflow_name: "Claude: Evaluator"
+      # evaluator_workflow_name: "PGE: Evaluator"
     secrets:
       github_app_id: ${{ secrets.GH_APP_ID }}
       github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
@@ -308,7 +344,7 @@ jobs:
 **`pge-evaluate.yml`** — PR 评审 + 里程碑推进
 
 ```yaml
-name: "Claude: Evaluator"
+name: "PGE: Evaluator"
 on:
   pull_request:
     types: [opened, synchronize, closed]

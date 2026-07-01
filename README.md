@@ -6,6 +6,8 @@ AI model calls are powered by **AWS Bedrock (Claude)**, authenticated via GitHub
 
 **English** · [中文文档](./README.zh-CN.md)
 
+📖 **Onboarding Guide:** [English](./docs/onboarding/onboarding.en.md) · [简体中文](./docs/onboarding/onboarding.zh-CN.md)
+
 ---
 
 ## How It Works
@@ -67,7 +69,7 @@ flowchart TD
 
 | File | Description |
 |------|-------------|
-| `templates/labels.yml` | PGE label set, import with `gh label import` |
+| `templates/labels.yml` | PGE label set, import with `scripts/import-labels.sh` |
 | `templates/ISSUE_TEMPLATE/` | Issue templates (prd / bug / change-request) |
 | `templates/CLAUDE.md.template` | CLAUDE.md scaffold |
 | `templates/cursor-skills/clean-code/SKILL.md` | Cross-repo code quality baseline |
@@ -77,32 +79,44 @@ flowchart TD
 
 ## Onboarding a New Repo — Complete Steps
 
+> 💡 **Fastest path:** run the one-command installer `scripts/install.sh`, then follow the polished, step-by-step onboarding guide in [`docs/onboarding/onboarding.en.md`](./docs/onboarding/onboarding.en.md) ([简体中文](./docs/onboarding/onboarding.zh-CN.md)). The steps below document the manual flow and the underlying details.
+
 ### Prerequisites
 
 - The target repo is hosted on GitHub
 - You have an AWS account with a Bedrock-enabled IAM Role (see Step 2)
-- [`gh` CLI](https://cli.github.com/) is installed and authenticated locally (used in Steps 1, 5, 7)
+- [`gh` CLI](https://cli.github.com/) is installed and authenticated locally (used in Step 5 to import labels)
+- `ruby` is available locally (used by `scripts/import-labels.sh` to import labels; macOS ships it)
 - `jq` is installed locally (required by the `claude-bedrock` action; it will fail immediately if missing)
 
 ---
 
 ### Step 1: Copy Template Files
 
+The quickest way is the one-command installer, which copies the labels, Issue templates, 5 PGE workflows, the verify script, all 7 SKILLs, and `CLAUDE.md` in one go:
+
 ```bash
 # Clone the library
-gh repo clone tiankai0114/ai-workflows-hub /tmp/ai-workflows-hub
+git clone https://github.com/tiankai0114/ai-workflows-hub.git /tmp/ai-workflows-hub
 
-# Navigate to your repo root
+# Navigate to your repo root and run the installer
 cd /path/to/your-repo
+bash /tmp/ai-workflows-hub/scripts/install.sh
+```
 
-# Copy templates
+<details>
+<summary>Or copy the files manually</summary>
+
+```bash
+cd /path/to/your-repo
 cp /tmp/ai-workflows-hub/templates/labels.yml .github/labels.yml
 cp -r /tmp/ai-workflows-hub/templates/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE
 cp /tmp/ai-workflows-hub/templates/CLAUDE.md.template CLAUDE.md
 mkdir -p .cursor/skills
-cp -r /tmp/ai-workflows-hub/templates/cursor-skills/clean-code .cursor/skills/
-cp -r /tmp/ai-workflows-hub/templates/cursor-skills/refactor .cursor/skills/
+# copy all 7 SKILLs
+cp -r /tmp/ai-workflows-hub/templates/cursor-skills/. .cursor/skills/
 ```
+</details>
 
 ### Step 2: Configure AWS IAM Role (Trust Policy)
 
@@ -198,16 +212,36 @@ Go to target repo → **Settings → Secrets and variables → Actions → New r
 
 ### Step 5: Import PGE Labels
 
+`gh label import` is not a real gh subcommand, so use the helper script, which parses `labels.yml` and creates each label with `gh label create --force` (create-or-update, safe to re-run). Requires `gh` (authenticated) and `ruby`.
+
 ```bash
 cd /path/to/your-repo
-gh label import .github/labels.yml --repo YOUR_ORG/YOUR_REPO
-```
 
-> Requires `gh auth login` with a token that has `write:repo` permission.
+# gh auth login: when prompted for a token, choose "Generate new token (classic)"
+# and grant the read:org and repo scopes
+gh auth login
+
+# auto-detects owner/repo from the git remote
+bash /tmp/ai-workflows-hub/scripts/import-labels.sh
+```
 
 ---
 
-### Step 6: Commit Templates to the Default Branch
+### Step 6: Enable Actions Write Permissions
+
+The Generator / Evaluator create branches and open PRs as Actions, so you must grant permissions in the repo settings, otherwise the workflows fail with insufficient permissions.
+
+Go to target repo → **Settings → Actions → General → Workflow permissions**:
+
+1. Select **Read and write permissions**
+2. Check **Allow GitHub Actions to create and approve pull requests**
+3. Click **Save**
+
+> **Note:** "Allow GitHub Actions to create and approve pull requests" is a repo-level switch that a workflow's own `permissions:` block cannot override, so it must be enabled here manually.
+
+---
+
+### Step 7: Commit Templates to the Default Branch
 
 Issue Templates only appear on GitHub's "New Issue" page when they are on the default branch:
 
@@ -219,14 +253,16 @@ git push origin main   # or master, depending on your default branch
 
 ---
 
-### Step 7: Add Trigger Workflow Files
+### Step 8: Add Trigger Workflow Files
+
+> If you ran `install.sh` (Step 1), these 5 workflow files are already copied into `.github/workflows/` — you only need to replace the placeholders below. The full YAML is shown here for reference / manual setup.
 
 Create the following files under `.github/workflows/` in your target repo. Replace `YOUR_ROLE_ARN`, `YOUR_BOT_NAME`, and `YOUR_BOT_ID`:
 
 **`pge-code-review.yml`** — Auto code review for human-authored PRs
 
 ```yaml
-name: "Claude: Code Review"
+name: "PGE: Code Review"
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
@@ -244,7 +280,7 @@ jobs:
 **`pge-decompose.yml`** — Split a large issue into sub-issues
 
 ```yaml
-name: "Claude: Decompose"
+name: "PGE: Decompose"
 on:
   issues:
     types: [labeled]
@@ -259,7 +295,7 @@ jobs:
 **`pge-plan.yml`** — Analyze issue, generate implementation plan
 
 ```yaml
-name: "Claude: Planner"
+name: "PGE: Planner"
 on:
   issues:
     types: [labeled]
@@ -278,7 +314,7 @@ jobs:
 **`pge-implement.yml`** — Implement code + Rework
 
 ```yaml
-name: "Claude: Generator"
+name: "PGE: Generator"
 on:
   issues:
     types: [labeled]
@@ -296,9 +332,9 @@ jobs:
       bot_name: "YOUR_BOT_NAME[bot]"
       mode: ${{ (github.event_name == 'pull_request' && github.event.label.name == 'pge/pr:needs-rework') && 'rework' || 'implement' }}
       pr_number: ${{ github.event.pull_request.number || '' }}
-      # evaluator_workflow_name defaults to "Claude: Evaluator".
+      # evaluator_workflow_name defaults to "PGE: Evaluator".
       # If you customized the name: field in pge-evaluate.yml, update this value to match.
-      # evaluator_workflow_name: "Claude: Evaluator"
+      # evaluator_workflow_name: "PGE: Evaluator"
     secrets:
       github_app_id: ${{ secrets.GH_APP_ID }}
       github_app_private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
@@ -308,7 +344,7 @@ jobs:
 **`pge-evaluate.yml`** — PR review + milestone advancement
 
 ```yaml
-name: "Claude: Evaluator"
+name: "PGE: Evaluator"
 on:
   pull_request:
     types: [opened, synchronize, closed]

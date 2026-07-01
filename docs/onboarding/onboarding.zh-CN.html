@@ -300,6 +300,7 @@
 
 <div class="page-header">
   <h1>🤖 ai-workflows-hub 接入指南</h1>
+  <p style="margin-top:4px; font-size:0.85rem;">简体中文 · <a href="onboarding.en.html">English</a></p>
   <p>将 AI 驱动的开发工作流（PGE）集成到任意 GitHub Repo</p>
   <p style="margin-top:6px; color:#444; font-size:0.9rem;">先用<strong>一条命令</strong>准备好所有文件，再完成几项无法脚本化的云端配置即可。完成后给 Issue 加标签，AI 自动写代码、开 PR、评审。</p>
   <span class="badge">AWS Bedrock · GitHub Actions · Claude</span>
@@ -316,7 +317,7 @@
       <span class="icon">🔧</span>
       <div>
         <span class="label">云端手动配置</span>
-        <span class="value">约 10 分钟</span>
+        <span class="value">约 20 分钟</span>
       </div>
     </div>
     <div class="time-card">
@@ -327,7 +328,7 @@
       </div>
     </div>
   </div>
-  <p class="time-card-note">流程分两部分：① 脚本自动复制所有文件；② 仅 AWS Role / GitHub App / Secrets 等需人工在控制台完成。</p>
+  <p class="time-card-note">流程分两部分：① 脚本自动复制所有文件；② AWS Role / GitHub App / Secrets / Actions 权限等需人工在控制台完成。其中 AWS Role 需他人配置，建议<strong>第一时间发起</strong>。</p>
 </div>
 
 <!-- ═════════════ 第一部分：一键准备文件（自动） ═════════════ -->
@@ -342,14 +343,11 @@
       <h2>运行安装脚本</h2>
       <p>在你的目标 repo 根目录运行 hub 提供的 <code>install.sh</code>，它会把标签、Issue 模板、5 个 PGE workflow、验证脚本、全部 SKILL 和 <code>CLAUDE.md</code> 一次性复制到位。</p>
       <pre><span class="comment"># 1) 克隆 hub 到临时目录</span>
-gh repo clone tiankai0114/ai-workflows-hub /tmp/ai-workflows-hub
+git clone https://github.com/tiankai0114/ai-workflows-hub.git /tmp/ai-workflows-hub
 
 <span class="comment"># 2) 进入你的 repo 根目录，运行安装脚本</span>
 cd /path/to/your-repo
-bash /tmp/ai-workflows-hub/scripts/install.sh
-
-<span class="comment"># 可选：同时自动导入 PGE 标签（需 gh 已登录，等价于步骤 6）</span>
-bash /tmp/ai-workflows-hub/scripts/install.sh --with-labels</pre>
+bash /tmp/ai-workflows-hub/scripts/install.sh</pre>
       <div class="info-box">ℹ️ 脚本<strong>只做文件准备</strong>，不会改动任何 GitHub / AWS 云端配置，可安全重复运行。复制完成后，进入第二部分完成人工配置。</div>
       <p style="margin-top:14px">脚本自动完成以下文件准备：</p>
       <ul class="checklist done">
@@ -360,7 +358,6 @@ bash /tmp/ai-workflows-hub/scripts/install.sh --with-labels</pre>
         <li><code>.cursor/skills/</code> — 全部 7 个 SKILL（clean-code、refactor、frontend、backend、api-design、testing、security）</li>
         <li><code>CLAUDE.md</code> — 从模板复制（若已存在则跳过，可加 <code>--force</code> 覆盖）</li>
       </ul>
-      <div class="info-box">ℹ️ 脚本<strong>只做文件准备</strong>，不会改动任何 GitHub / AWS 云端配置，可安全重复运行。复制完成后，进入第二部分完成人工配置。</div>
     </div>
   </div>
 
@@ -376,13 +373,13 @@ bash /tmp/ai-workflows-hub/scripts/install.sh --with-labels</pre>
     <div class="step-icon">☁️<span class="num">步骤 2</span></div>
     <div class="step-body">
       <h2>申请 AWS Bedrock Role 权限</h2>
-      <p>5 个 workflow 里的 <code>aws_role</code> 已经预填为共享的 Telenav Bedrock Role，<strong>无需在 repo 里修改</strong>。首次接入时，只需联系相关团队把该 Role 的 OIDC 信任策略配置到你的 repo 即可（一次性操作）。</p>
+      <p>首次接入时，只需联系相关团队把该 Role 的 OIDC 信任策略配置到你的 repo 即可（一次性操作）。</p>
+      <div class="warn-box">⚠️ 此步骤依赖他人在 AWS 控制台配置，属于<strong>异步等待项</strong>。请<strong>第一时间发起</strong>，其余步骤（3~7）可并行进行，无需干等。在此 Role 配置好之前，workflow 无法调用 Bedrock。</div>
       <ul class="checklist">
         <li>联系 <strong>Build/Release team</strong>，或邮件 <code>ktian@telenavsoftware.com</code></li>
         <li>提供你的 repo 全名 <code>YOUR_ORG/YOUR_REPO</code>，用于加入 Role 的信任策略</li>
         <li>配置完成后，workflow 即可通过 GitHub OIDC assume 该 Role 调用 Bedrock</li>
       </ul>
-      <div class="info-box">ℹ️ 模板中预填的 Role：<code>arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge</code>。如需更换为自己的 Role，再手动替换 5 个 workflow 里的 <code>aws_role</code> 值即可。</div>
     </div>
   </div>
 
@@ -395,6 +392,7 @@ bash /tmp/ai-workflows-hub/scripts/install.sh --with-labels</pre>
       <ul class="checklist">
         <li>打开 <a href="https://github.com/settings/apps/new" target="_blank">github.com/settings/apps/new</a></li>
         <li>App name：填写全局唯一名称，建议加 repo 名前缀（如 <code>your-repo-ci</code>）</li>
+        <li>Homepage URL：填入自己的 repo 地址即可</li>
         <li>Webhook：取消勾选 Active</li>
         <li>Permissions → Contents: Read &amp; Write、Issues: Read &amp; Write、Pull requests: Read &amp; Write</li>
         <li>Where installed：Only on this account</li>
@@ -446,7 +444,23 @@ https://api.github.com/users/your-app-name[bot]</pre>
 
   <!-- ───────── STEP 5 ───────── -->
   <div class="step manual">
-    <div class="step-icon">✏️<span class="num">步骤 5</span></div>
+    <div class="step-icon">⚙️<span class="num">步骤 5</span></div>
+    <div class="step-body">
+      <h2>开启 Actions 的写权限</h2>
+      <p>Generator / Evaluator 需要以 Actions 身份创建分支、开 PR，必须在 repo 设置里放开权限，否则 workflow 会因权限不足而失败。</p>
+      <p>打开目标 repo → <strong>Settings → Actions → General → Workflow permissions</strong>，然后：</p>
+      <ul class="checklist">
+        <li>选中 <strong>Read and write permissions</strong></li>
+        <li>勾选 <strong>Allow GitHub Actions to create and approve pull requests</strong></li>
+        <li>点击 <strong>Save</strong> 保存</li>
+      </ul>
+      <div class="info-box">ℹ️「允许 Actions 创建 PR」是仓库级开关，即使 workflow 里已声明 <code>permissions</code> 也无法覆盖它，因此这一步必须在控制台手动开启。</div>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 6 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">✏️<span class="num">步骤 6</span></div>
     <div class="step-body">
       <h2>替换占位符并填写内容</h2>
       <p>脚本复制的文件里有几处占位符 / 占位内容需要按项目实际填写。</p>
@@ -459,35 +473,38 @@ https://api.github.com/users/your-app-name[bot]</pre>
           <tr><td><code>your-app[bot]</code></td><td>GitHub App bot username，如 <code>my-app-ci[bot]</code></td></tr>
         </tbody>
       </table>
-      <div class="info-box">ℹ️ <code>aws_role</code> 已预填共享 Bedrock Role，<strong>无需替换</strong>（见步骤 2）。decompose / code-review 两个文件没有 bot 占位符，无需改动。</div>
+      <div class="info-box">ℹ️ <code>aws_role</code> 已预填共享 Bedrock Role，<strong>无需替换</strong>（其权限申请见步骤 2）。decompose / code-review 两个文件没有 bot 占位符，无需改动。</div>
 
       <ul class="checklist">
         <li><strong>② 填写 <code>CLAUDE.md</code></strong> — 技术栈、架构约束、关键命令、SKILL 索引（AI agent 的"大脑"，越详细效果越好）</li>
-        <li><strong>③ 改写 <code>.github/scripts/pge-verify.sh</code></strong> — 默认是输出成功的占位脚本，必须改成真实的 build / lint / test 命令</li>
+        <li><strong>③ <code>.github/scripts/pge-verify.sh</code></strong> — 默认是输出成功的占位脚本，如果你有需求，可以改成你自己的校验脚本</li>
       </ul>
-      <div class="info-box">ℹ️ workflow 里 <strong>没有</strong> <code>project_context</code> —— 项目上下文统一写在 <code>CLAUDE.md</code>，workflow 自动读取，无需在多个 workflow 里重复维护。</div>
-      <div class="warn-box">⚠️ <code>pge-implement.yml</code> 已设置 <code>evaluator_workflow_name: "PGE: Evaluator"</code>，与 <code>pge-evaluate.yml</code> 的 <code>name: "PGE: Evaluator"</code> 一一对应。若改了 evaluator 文件的 <code>name:</code>，必须同步此参数，否则 Rework 模式下无法重新触发 Evaluator。</div>
-    </div>
-  </div>
-
-  <!-- ───────── STEP 6 ───────── -->
-  <div class="step manual">
-    <div class="step-icon">🏷️<span class="num">步骤 6</span></div>
-    <div class="step-body">
-      <h2>导入 PGE 标签</h2>
-      <p>将 PGE 标签体系导入到目标 repo，后续所有 workflow 触发都依赖这些标签。</p>
-      <pre><span class="comment"># 确保 gh CLI 已登录</span>
-gh auth login
-
-<span class="comment"># 导入标签</span>
-gh label import .github/labels.yml --repo YOUR_ORG/YOUR_REPO</pre>
-      <div class="info-box">ℹ️ 若步骤 1 运行脚本时加了 <code>--with-labels</code>，本步骤已自动完成，可跳过。</div>
     </div>
   </div>
 
   <!-- ───────── STEP 7 ───────── -->
   <div class="step manual">
-    <div class="step-icon">📝<span class="num">步骤 7</span></div>
+    <div class="step-icon">🏷️<span class="num">步骤 7</span></div>
+    <div class="step-body">
+      <h2>导入 PGE 标签</h2>
+      <p>将 PGE 标签体系导入到目标 repo，后续所有 workflow 触发都依赖这些标签。此步骤依赖 <code>gh</code>（GitHub CLI）和 <code>ruby</code>，若本地尚未安装 <code>gh</code>，请先安装（macOS 自带 ruby），可用 <code>gh --version</code> 确认是否已安装。</p>
+      <pre><span class="comment"># 若未安装 gh，先安装（任选适合你系统的方式）</span>
+brew install gh                 <span class="comment"># macOS (Homebrew)</span>
+sudo apt install gh             <span class="comment"># Debian / Ubuntu</span>
+<span class="comment"># 其他系统见 https://github.com/cli/cli#installation</span>
+
+<span class="comment"># 确保 gh CLI 已登录（执行时会要求一个 token，按提示创建即可）</span>
+<span class="comment"># 创建 token 时选择 Generate new token (classic)，权限勾选 read:org、repo</span>
+gh auth login
+
+<span class="comment"># 在你的 repo 根目录运行 hub 提供的导入脚本（自动识别 owner/repo）</span>
+bash /tmp/ai-workflows-hub/scripts/import-labels.sh</pre>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 8 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">📝<span class="num">步骤 8</span></div>
     <div class="step-body">
       <h2>提交到默认分支</h2>
       <p>Reusable workflow 引用、Issue 模板、标签都必须在<strong>默认分支</strong>（main / master）上才会生效。</p>
@@ -509,9 +526,7 @@ git push origin main</pre>
   <h3>✅ 接入完成后的完整工作流</h3>
   <div class="flow-box">
     创建 Issue（使用 Issue Template）<br>
-    <span class="arrow">↓</span> 加标签 <span class="label-tag">pge/status:decompose</span><br>
-    &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Decomposer</span> 自动拆分为带依赖关系的子 Issue<br>
-    <span class="arrow">↓</span> 给子 Issue 加标签 <span class="label-tag">pge/status:ready</span><br>
+    <span class="arrow">↓</span> 加标签 <span class="label-tag">pge/status:ready</span><br>
     &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Planner</span> 扫描代码库 → 自动问答（≤3 轮）→ 输出里程碑计划<br>
     <span class="arrow">↓</span> 确认计划 → 加标签 <span class="label-tag">pge/status:implement</span><br>
     &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Generator</span> 写代码 → 以 bot 身份开 PR<br>
@@ -524,10 +539,10 @@ git push origin main</pre>
 <!-- ───────── 参考值 ───────── -->
 <div class="reference-box" style="margin-top:16px">
   <h3>📌 demo repo 实际配置参考（tiankai0114/search-android-demo-app）</h3>
+  <p style="font-size:0.85rem; color:#666; margin-bottom:6px;">以下 4 项仅为一个示例，供参考。</p>
   <table class="secret-table">
     <thead><tr><th>参数</th><th>值</th></tr></thead>
     <tbody>
-      <tr><td><code>aws_role</code></td><td><code>arn:aws:iam::759864781520:role/jenkins-actions-bedrock-pge</code></td></tr>
       <tr><td><code>bot_name</code></td><td><code>ai-test-kai[bot]</code></td></tr>
       <tr><td><code>bot_id</code></td><td><code>290981734</code></td></tr>
       <tr><td>GitHub App ID（<code>GH_APP_ID</code>）</td><td><code>3969724</code></td></tr>

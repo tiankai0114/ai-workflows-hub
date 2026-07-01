@@ -29,7 +29,7 @@
 # ARGS / FLAGS
 # ------------
 #   [TARGET_DIR]    repo root to install into (default: current directory)
-#   --with-labels   run `gh label import` after copying (needs gh authenticated)
+#   --with-labels   import PGE labels after copying (needs gh authenticated + ruby)
 #   --force         overwrite an existing CLAUDE.md
 #   -h | --help     show this help
 # =============================================================================
@@ -112,15 +112,15 @@ fi
 
 # ── optional: import PGE labels ──────────────────────────────────────────────
 if [ "$WITH_LABELS" -eq 1 ]; then
-  if command -v gh >/dev/null 2>&1; then
-    info "Importing PGE labels via gh…"
-    if ( cd "$TARGET" && gh label import .github/labels.yml ); then
+  if command -v gh >/dev/null 2>&1 && command -v ruby >/dev/null 2>&1; then
+    info "Importing PGE labels…"
+    if ( cd "$TARGET" && bash "$SCRIPT_DIR/import-labels.sh" ); then
       ok "PGE labels imported"
     else
-      warn "gh label import failed — import manually: gh label import .github/labels.yml"
+      warn "label import failed — import manually: bash $SCRIPT_DIR/import-labels.sh --repo OWNER/REPO"
     fi
   else
-    warn "gh CLI not found — skipped label import"
+    warn "gh CLI and/or ruby not found — skipped label import"
   fi
 fi
 
@@ -144,7 +144,7 @@ ${BOLD}✓ Files prepared.${RST} Remaining MANUAL steps (cannot be scripted):
 EOF
 
 if [ "$WITH_LABELS" -ne 1 ]; then
-  printf '%s\n' "  ${BOLD}7.${RST} Import labels:  ${CYN}gh label import .github/labels.yml${RST}  (or re-run with --with-labels)"
+  printf '%s\n' "  ${BOLD}7.${RST} Import labels:  ${CYN}bash $SCRIPT_DIR/import-labels.sh${RST}  (or re-run with --with-labels)"
 fi
 
 cat <<EOF
@@ -153,5 +153,5 @@ cat <<EOF
        git commit -m "chore: integrate ai-workflows-hub PGE"
        git push origin main
 
-See the full guide: docs/onboarding.zh-CN.html
+See the full guide: docs/onboarding/onboarding.zh-CN.html
 EOF

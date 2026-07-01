@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ai-workflows-hub Onboarding Guide</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      padding: 40px 20px 80px;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .page-header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #0d1b2a;
+    }
+    .page-header p {
+      margin-top: 8px;
+      color: #555;
+      font-size: 0.95rem;
+    }
+    .badge {
+      display: inline-block;
+      background: #e8f4fd;
+      color: #0969da;
+      border: 1px solid #b6d4f7;
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 0.78rem;
+      margin-top: 10px;
+    }
+
+    .time-cards {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+    .time-card {
+      background: white;
+      border: 1px solid #e1e4e8;
+      border-radius: 10px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      font-size: 0.88rem;
+      color: #333;
+    }
+    .time-card .icon { font-size: 1.3rem; }
+    .time-card .label { color: #888; font-size: 0.78rem; display: block; margin-bottom: 2px; }
+    .time-card .value { font-weight: 700; color: #0d1b2a; font-size: 0.95rem; }
+    .time-card-note {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #888;
+    }
+
+    .section-title {
+      max-width: 860px;
+      margin: 0 auto 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #0d1b2a;
+    }
+    .section-title .pill {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 2px 10px;
+      border-radius: 20px;
+    }
+    .pill-auto   { background: #fffbe6; color: #9a6700; border: 1px solid #f5cc5c; }
+    .pill-manual { background: #fff0f0; color: #cf222e; border: 1px solid #ffc1c0; }
+
+    .timeline {
+      max-width: 860px;
+      margin: 0 auto 36px;
+      position: relative;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 36px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, #0969da, #6f42c1, #1a7f37);
+    }
+
+    .step {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 28px;
+      position: relative;
+    }
+
+    .step-icon {
+      flex-shrink: 0;
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      background: white;
+      border: 3px solid #0969da;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      position: relative;
+      z-index: 1;
+      box-shadow: 0 2px 8px rgba(9,105,218,0.15);
+    }
+    .step-icon .num {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #0969da;
+      margin-top: 2px;
+    }
+    .step.manual .step-icon { border-color: #cf222e; }
+    .step.manual .step-icon .num { color: #cf222e; }
+
+    .step-body {
+      flex: 1;
+      background: white;
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border: 1px solid #e8eaed;
+    }
+
+    .step-body h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #0d1b2a;
+    }
+
+    .step-body p {
+      font-size: 0.9rem;
+      color: #555;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+
+    .checklist {
+      list-style: none;
+      margin-top: 8px;
+    }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.88rem;
+      color: #333;
+      padding: 5px 0;
+      border-bottom: 1px solid #f0f2f5;
+      line-height: 1.5;
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li::before {
+      content: '☐';
+      font-size: 1rem;
+      color: #0969da;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .checklist.done li::before { content: '✓'; color: #1a7f37; }
+
+    code {
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.82em;
+      color: #c0392b;
+    }
+
+    pre {
+      background: #0d1117;
+      color: #e6edf3;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      margin-top: 10px;
+      line-height: 1.6;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+    pre .comment { color: #8b949e; }
+    pre .key { color: #79c0ff; }
+    pre .val { color: #a5d6ff; }
+    pre .str { color: #a5d6ff; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .tag-required { background: #fff0f0; color: #cf222e; border: 1px solid #ffc1c0; }
+    .tag-optional { background: #f0f8f0; color: #1a7f37; border: 1px solid #b5e3b5; }
+    .tag-auto     { background: #fffbe6; color: #9a6700; border: 1px solid #f5cc5c; }
+
+    .info-box {
+      background: #ddf4ff;
+      border: 1px solid #54aeff;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #0550ae;
+      margin-top: 10px;
+    }
+    .warn-box {
+      background: #fff8c5;
+      border: 1px solid #f5cc5c;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #7d4e00;
+      margin-top: 10px;
+    }
+
+    .secret-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-top: 10px;
+    }
+    .secret-table th {
+      background: #f6f8fa;
+      text-align: left;
+      padding: 8px 12px;
+      border: 1px solid #e1e4e8;
+      font-weight: 600;
+      color: #444;
+    }
+    .secret-table td {
+      padding: 8px 12px;
+      border: 1px solid #e1e4e8;
+      vertical-align: top;
+    }
+
+    .flow-box {
+      background: #f6f8fa;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: #333;
+      line-height: 2;
+    }
+    .flow-box .arrow { color: #0969da; font-weight: bold; }
+    .flow-box .label-tag {
+      background: #0969da;
+      color: white;
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .flow-box .bot-tag {
+      background: #6f42c1;
+      color: white;
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .reference-box {
+      max-width: 860px;
+      margin: 32px auto 0;
+      background: white;
+      border-radius: 12px;
+      padding: 20px 24px;
+      border: 1px solid #e8eaed;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .reference-box h3 { font-size: 0.95rem; margin-bottom: 12px; color: #444; }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>🤖 ai-workflows-hub Onboarding Guide</h1>
+  <p style="margin-top:4px; font-size:0.85rem;"><a href="onboarding.zh-CN.html">简体中文</a> · English</p>
+  <p>Integrate the AI-driven development workflow (PGE) into any GitHub repo</p>
+  <p style="margin-top:6px; color:#444; font-size:0.9rem;">First prepare all files with <strong>one command</strong>, then complete a few cloud configurations that cannot be scripted. Once done, just add a label to an Issue and AI writes code, opens PRs, and reviews them.</p>
+  <span class="badge">AWS Bedrock · GitHub Actions · Claude</span>
+
+  <div class="time-cards">
+    <div class="time-card">
+      <span class="icon">⚡</span>
+      <div>
+        <span class="label">File prep</span>
+        <span class="value">1 command / ~1 min</span>
+      </div>
+    </div>
+    <div class="time-card">
+      <span class="icon">🔧</span>
+      <div>
+        <span class="label">Manual cloud config</span>
+        <span class="value">~20 min</span>
+      </div>
+    </div>
+    <div class="time-card">
+      <span class="icon">🔁</span>
+      <div>
+        <span class="label">Reusable</span>
+        <span class="value">Onboard each new repo independently</span>
+      </div>
+    </div>
+  </div>
+  <p class="time-card-note">The process has two parts: ① the script copies all files automatically; ② the AWS Role / GitHub App / Secrets / Actions permissions must be done manually in the consoles. The AWS Role requires someone else to configure it, so <strong>kick it off first</strong>.</p>
+</div>
+
+<!-- ═════════════ Part 1: One-command file prep (automated) ═════════════ -->
+<div class="section-title">📦 Part 1 · One-Command File Prep <span class="pill pill-auto">automated by script</span></div>
+
+<div class="timeline">
+
+  <!-- ───────── STEP 1 ───────── -->
+  <div class="step">
+    <div class="step-icon">⚡<span class="num">Step 1</span></div>
+    <div class="step-body">
+      <h2>Run the install script</h2>
+      <p>From your target repo root, run the <code>install.sh</code> provided by the hub. It copies the labels, Issue templates, 5 PGE workflows, the verify script, all SKILLs, and <code>CLAUDE.md</code> into place in one go.</p>
+      <pre><span class="comment"># 1) Clone the hub into a temp directory</span>
+git clone https://github.com/tiankai0114/ai-workflows-hub.git /tmp/ai-workflows-hub
+
+<span class="comment"># 2) Go to your repo root and run the install script</span>
+cd /path/to/your-repo
+bash /tmp/ai-workflows-hub/scripts/install.sh</pre>
+      <div class="info-box">ℹ️ The script <strong>only prepares files</strong>. It does not touch any GitHub / AWS cloud configuration and is safe to re-run. After the copy completes, move on to Part 2 for the manual configuration.</div>
+      <p style="margin-top:14px">The script prepares the following files automatically:</p>
+      <ul class="checklist done">
+        <li><code>.github/labels.yml</code> — PGE label definitions</li>
+        <li><code>.github/ISSUE_TEMPLATE/</code> — 3 Issue templates (prd / change-request / bug)</li>
+        <li><code>.github/workflows/pge-*.yml</code> — 5 trigger workflows (decompose / plan / implement / code-review / evaluate)</li>
+        <li><code>.github/scripts/pge-verify.sh</code> — an executable placeholder verify script (replace with real build/lint/test later)</li>
+        <li><code>.cursor/skills/</code> — all 7 SKILLs (clean-code, refactor, frontend, backend, api-design, testing, security)</li>
+        <li><code>CLAUDE.md</code> — copied from template (skipped if it already exists; use <code>--force</code> to overwrite)</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═════════════ Part 2: Manual configuration (cannot be scripted) ═════════════ -->
+<div class="section-title">🔧 Part 2 · Cloud Configuration <span class="pill pill-manual">manual</span></div>
+
+<div class="timeline">
+
+  <!-- ───────── STEP 2 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">☁️<span class="num">Step 2</span></div>
+    <div class="step-body">
+      <h2>Request AWS Bedrock Role permissions</h2>
+      <p>For first-time onboarding, you only need to ask the relevant team to add your repo to the Role's OIDC trust policy (a one-time operation).</p>
+      <div class="warn-box">⚠️ This step depends on someone configuring it in the AWS console, so it is an <strong>asynchronous, blocking item</strong>. <strong>Kick it off first</strong>; the remaining steps (3~8) can proceed in parallel — no need to wait idly. Until this Role is configured, the workflows cannot call Bedrock.</div>
+      <ul class="checklist">
+        <li>Contact the <strong>Build/Release team</strong>, or email <code>ktian@telenavsoftware.com</code></li>
+        <li>Provide your full repo name <code>YOUR_ORG/YOUR_REPO</code> so it can be added to the Role's trust policy</li>
+        <li>Once configured, the workflows can assume the Role via GitHub OIDC to call Bedrock</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 3 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">🤖<span class="num">Step 3</span></div>
+    <div class="step-body">
+      <h2>Create a GitHub App (Bot)</h2>
+      <p>The Generator / Evaluator need to commit code and open PRs as a bot. Code Review, Decompose, and Plan do not need the App private key.</p>
+      <ul class="checklist">
+        <li>Open <a href="https://github.com/settings/apps/new" target="_blank">github.com/settings/apps/new</a></li>
+        <li>App name: a globally unique name; prefixing with the repo name is recommended (e.g. <code>your-repo-ci</code>)</li>
+        <li>Homepage URL: your repo URL is fine</li>
+        <li>Webhook: uncheck Active</li>
+        <li>Permissions → Contents: Read &amp; Write, Issues: Read &amp; Write, Pull requests: Read &amp; Write</li>
+        <li>Where installed: Only on this account</li>
+        <li>Click <strong>Create GitHub App</strong> and record the <strong>App ID</strong> at the top of the page</li>
+        <li>Click <strong>Generate a private key</strong> and download the <code>.pem</code> file</li>
+        <li>In the left menu, click <strong>Install App</strong> → install it on the target repo</li>
+        <li>Look up the bot user ID (see the command below) and record the returned <code>"id"</code> value</li>
+      </ul>
+      <pre><span class="comment"># Look up the bot user ID (replace your-app-name)</span>
+curl https://api.github.com/users/your-app-name%5Bbot%5D | grep '"id"'
+
+<span class="comment"># Or open in a browser:</span>
+https://api.github.com/users/your-app-name[bot]</pre>
+      <div class="info-box">ℹ️ Replace spaces in the App name with <code>-</code>, lowercase everything, and append the <code>[bot]</code> suffix to form the bot username.</div>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 4 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">🔑<span class="num">Step 4</span></div>
+    <div class="step-body">
+      <h2>Add Secrets to the target repo</h2>
+      <p>Open the target repo → <strong>Settings → Secrets and variables → Actions → New repository secret</strong></p>
+      <table class="secret-table">
+        <thead>
+          <tr><th>Secret</th><th>Value</th><th>Required</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>GH_APP_ID</code></td>
+            <td>The GitHub App's numeric ID</td>
+            <td><span class="tag tag-required">Required</span> Implement / Evaluate</td>
+          </tr>
+          <tr>
+            <td><code>GH_APP_PRIVATE_KEY</code></td>
+            <td>Full contents of the <code>.pem</code> file (including the <code>-----BEGIN RSA PRIVATE KEY-----</code> header/footer lines)</td>
+            <td><span class="tag tag-required">Required</span> Implement / Evaluate</td>
+          </tr>
+          <tr>
+            <td><code>FIGMA_TOKEN</code></td>
+            <td>Figma Personal Access Token</td>
+            <td><span class="tag tag-optional">Optional</span> when you have Figma designs</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="info-box">ℹ️ Code Review, Decompose, and Plan only need the AWS Role ARN (written in the workflow); they do <strong>not</strong> need GH_APP_ID / GH_APP_PRIVATE_KEY.</div>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 5 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">⚙️<span class="num">Step 5</span></div>
+    <div class="step-body">
+      <h2>Enable Actions write permissions</h2>
+      <p>The Generator / Evaluator need to create branches and open PRs as Actions, so you must grant permissions in the repo settings — otherwise the workflows will fail due to insufficient permissions.</p>
+      <p>Open the target repo → <strong>Settings → Actions → General → Workflow permissions</strong>, then:</p>
+      <ul class="checklist">
+        <li>Select <strong>Read and write permissions</strong></li>
+        <li>Check <strong>Allow GitHub Actions to create and approve pull requests</strong></li>
+        <li>Click <strong>Save</strong></li>
+      </ul>
+      <div class="info-box">ℹ️ "Allow GitHub Actions to create and approve pull requests" is a repo-level switch. Even if the workflow declares <code>permissions</code>, it cannot override this, so this step must be enabled manually in the console.</div>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 6 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">✏️<span class="num">Step 6</span></div>
+    <div class="step-body">
+      <h2>Replace placeholders and fill in content</h2>
+      <p>A few placeholders / placeholder content in the copied files need to be filled in per your project.</p>
+
+      <p style="margin-top:12px"><strong>① Globally replace the bot placeholders in <code>.github/workflows/pge-*.yml</code></strong> (they appear in the plan / implement / evaluate files, with identical values):</p>
+      <table class="secret-table" style="margin-bottom:12px">
+        <thead><tr><th>Placeholder</th><th>Replace with</th></tr></thead>
+        <tbody>
+          <tr><td><code>YOUR_BOT_ID</code></td><td>The numeric user ID from Step 3</td></tr>
+          <tr><td><code>your-app[bot]</code></td><td>The GitHub App bot username, e.g. <code>my-app-ci[bot]</code></td></tr>
+        </tbody>
+      </table>
+      <div class="info-box">ℹ️ <code>aws_role</code> is pre-filled with the shared Bedrock Role and <strong>does not need to be replaced</strong> (see Step 2 for its permission request). The decompose / code-review files have no bot placeholders and need no changes.</div>
+
+      <ul class="checklist">
+        <li><strong>② Fill in <code>CLAUDE.md</code></strong> — tech stack, architecture constraints, key commands, SKILL index (the AI agent's "brain" — the more detail, the better)</li>
+        <li><strong>③ <code>.github/scripts/pge-verify.sh</code></strong> — a placeholder script that just prints success by default; if needed, replace it with your own verification script</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 7 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">🏷️<span class="num">Step 7</span></div>
+    <div class="step-body">
+      <h2>Import PGE labels</h2>
+      <p>Import the PGE label system into the target repo — every workflow trigger depends on these labels. This step requires <code>gh</code> (GitHub CLI) and <code>ruby</code>. If <code>gh</code> is not installed locally, install it first (macOS ships ruby). Use <code>gh --version</code> to check whether it is installed.</p>
+      <pre><span class="comment"># If gh is not installed, install it first (pick what fits your system)</span>
+brew install gh                 <span class="comment"># macOS (Homebrew)</span>
+sudo apt install gh             <span class="comment"># Debian / Ubuntu</span>
+<span class="comment"># For other systems see https://github.com/cli/cli#installation</span>
+
+<span class="comment"># Make sure the gh CLI is logged in (it will ask for a token — create one as prompted)</span>
+<span class="comment"># When creating the token, choose Generate new token (classic) and check read:org, repo</span>
+gh auth login
+
+<span class="comment"># From your repo root, run the import script the hub provides (auto-detects owner/repo)</span>
+bash /tmp/ai-workflows-hub/scripts/import-labels.sh</pre>
+    </div>
+  </div>
+
+  <!-- ───────── STEP 8 ───────── -->
+  <div class="step manual">
+    <div class="step-icon">📝<span class="num">Step 8</span></div>
+    <div class="step-body">
+      <h2>Commit to the default branch</h2>
+      <p>Reusable workflow references, Issue templates, and labels only take effect on the <strong>default branch</strong> (main / master).</p>
+      <ul class="checklist">
+        <li>Commit all the files copied by the script and filled in</li>
+        <li>Push to the default branch</li>
+        <li>Open the repo → Issues → New issue and confirm the template list appears</li>
+      </ul>
+      <pre>git add .github .cursor CLAUDE.md
+git commit -m "chore: integrate ai-workflows-hub PGE"
+git push origin main</pre>
+    </div>
+  </div>
+
+</div>
+
+<!-- ───────── Full workflow diagram ───────── -->
+<div class="reference-box">
+  <h3>✅ The Full Workflow After Onboarding</h3>
+  <div class="flow-box">
+    Create an Issue (using an Issue Template)<br>
+    <span class="arrow">↓</span> Add label <span class="label-tag">pge/status:ready</span><br>
+    &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Planner</span> scans the codebase → auto Q&amp;A (≤3 rounds) → outputs a milestone plan<br>
+    <span class="arrow">↓</span> Confirm the plan → add label <span class="label-tag">pge/status:implement</span><br>
+    &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Generator</span> writes code → opens a PR as the bot<br>
+    <span class="arrow">↓</span> The PR automatically triggers <span class="label-tag">pge/pr:approved</span> or <span class="label-tag">pge/pr:needs-rework</span><br>
+    &nbsp;&nbsp;&nbsp;<span class="bot-tag">Claude Evaluator</span> runs pge-verify.sh (build + lint + test) + code review → advances to the next Milestone if it passes<br>
+    <span class="arrow">↓</span> Human review and merge the PR
+  </div>
+</div>
+
+<!-- ───────── Reference values ───────── -->
+<div class="reference-box" style="margin-top:16px">
+  <h3>📌 Demo Repo Reference Config (tiankai0114/search-android-demo-app)</h3>
+  <p style="font-size:0.85rem; color:#666; margin-bottom:6px;">The following 4 items are just an example, for reference.</p>
+  <table class="secret-table">
+    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td><code>bot_name</code></td><td><code>ai-test-kai[bot]</code></td></tr>
+      <tr><td><code>bot_id</code></td><td><code>290981734</code></td></tr>
+      <tr><td>GitHub App ID (<code>GH_APP_ID</code>)</td><td><code>3969724</code></td></tr>
+      <tr><td>App name</td><td><code>ai-test-kai</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>
