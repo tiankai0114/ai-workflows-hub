@@ -16,6 +16,11 @@ on:
   issues:
     types: [labeled]
 
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
 jobs:
   decompose:
     if: github.event.label.name == 'pge/status:decompose'
