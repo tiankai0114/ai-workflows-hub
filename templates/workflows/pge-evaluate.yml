@@ -28,6 +28,13 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+  issues: write
+  statuses: read
+  
 jobs:
   # Human reviewer requested changes on a bot PR → label it for rework
   human-rework:
